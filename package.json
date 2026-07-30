@@ -18,6 +18,7 @@
     "axios": "^1.19.0",
     "dayjs": "^1.11.21",
     "leaflet": "^1.9.4",
+    "lucide-react": "^1.28.0",
     "react": "^19.2.7",
     "react-countup": "^6.5.3",
     "react-dom": "^19.2.7",

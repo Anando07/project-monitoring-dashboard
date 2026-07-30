@@ -70,11 +70,12 @@ BODY
 
     overflow-y:auto;
 
-    overflow-x:hidden;
+    overflow-x:visible;
 
     padding:25px;
 
     background:#f4f7fb;
+    overscroll-behavior: contain;
 
 }
 
