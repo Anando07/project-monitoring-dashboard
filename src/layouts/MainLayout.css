@@ -13,9 +13,9 @@ body,
 #root{
     width:100%;
     height:100%;
-    overflow:hidden;
     font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;
     background:#f4f7fb;
+    overflow:hidden;
 }
 
 /* ===========================
@@ -23,15 +23,13 @@ LAYOUT
 =========================== */
 
 .layout{
-
+    display:flex;
     width:100%;
-
     height:100vh;
-
 }
 
 /* ===========================
-PAGE
+PAGE WRAPPER
 =========================== */
 
 .page-wrapper{
@@ -39,6 +37,12 @@ PAGE
     margin-left:270px;
 
     width:calc(100% - 270px);
+
+    height:100vh;
+
+    display:flex;
+
+    flex-direction:column;
 
     transition:all .3s ease;
 
@@ -55,14 +59,14 @@ PAGE
 }
 
 /* ===========================
-MAIN CONTENT
+BODY
 =========================== */
 
 .main-content{
 
-    margin-top:80px;
+    flex:1;
 
-    height:calc(100vh - 80px);
+    margin-top:80px;
 
     overflow-y:auto;
 
@@ -86,119 +90,13 @@ MAIN CONTENT
 
     background:#cbd5e1;
 
-    border-radius:20px;
+    border-radius:10px;
 
 }
 
 .main-content::-webkit-scrollbar-track{
 
     background:transparent;
-
-}
-
-/* ===========================
-DASHBOARD
-=========================== */
-
-.dashboard-container{
-
-    width:100%;
-
-}
-
-.dashboard-container h1{
-
-    font-size:28px;
-
-    color:#111827;
-
-}
-
-.dashboard-container p{
-
-    color:#64748b;
-
-    margin:10px 0 30px;
-
-}
-
-/* ===========================
-GRID
-=========================== */
-
-.demo-grid{
-
-    display:grid;
-
-    grid-template-columns:repeat(4,1fr);
-
-    gap:20px;
-
-}
-
-.demo-card{
-
-    background:#fff;
-
-    border-radius:15px;
-
-    min-height:140px;
-
-    display:flex;
-
-    justify-content:center;
-
-    align-items:center;
-
-    font-size:18px;
-
-    font-weight:600;
-
-    color:#334155;
-
-    box-shadow:0 4px 15px rgba(0,0,0,.05);
-
-}
-
-.demo-card.large{
-
-    grid-column:span 2;
-
-    min-height:320px;
-
-}
-
-.demo-card.full{
-
-    grid-column:span 4;
-
-    min-height:420px;
-
-}
-
-/* ===========================
-LAPTOP
-=========================== */
-
-@media(max-width:1200px){
-
-.demo-grid{
-
-grid-template-columns:repeat(2,1fr);
-
-}
-
-.demo-card.large{
-
-grid-column:span 2;
-
-}
-
-.demo-card.full{
-
-grid-column:span 2;
-
-}
 
 }
 
@@ -251,24 +149,6 @@ width:100%;
 .main-content{
 
 padding:15px;
-
-}
-
-.demo-grid{
-
-grid-template-columns:1fr;
-
-}
-
-.demo-card.large{
-
-grid-column:span 1;
-
-}
-
-.demo-card.full{
-
-grid-column:span 1;
 
 }
 

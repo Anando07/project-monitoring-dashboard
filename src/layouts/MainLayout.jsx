@@ -36,7 +36,7 @@ function MainLayout() {
                 />
 
                 {/* Main Content */}
-                <main className="page-container">
+                <main className="main-content">
                     <Outlet />
                 </main>
 
