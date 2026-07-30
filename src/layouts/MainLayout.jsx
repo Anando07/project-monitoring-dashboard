@@ -1,4 +1,4 @@
-import React from "react";
+import { useState } from "react";
 import { Outlet } from "react-router-dom";
 
 import Sidebar from "../components/Sidebar/Sidebar";
@@ -6,16 +6,36 @@ import Header from "../components/Header/Header";
 
 import "./MainLayout.css";
 
-const MainLayout = () => {
+function MainLayout() {
+
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+
     return (
-        <div className="main-layout">
 
-            <Sidebar />
+        <div className="layout">
 
-            <div className="main-content">
+            {/* Sidebar */}
+            <Sidebar
+                open={sidebarOpen}
+                setSidebarOpen={setSidebarOpen}
+            />
 
-                <Header />
+            {/* Page */}
+            <div
+                className={
+                    sidebarOpen
+                        ? "page-wrapper"
+                        : "page-wrapper expanded"
+                }
+            >
 
+                {/* Header */}
+                <Header
+                    sidebarOpen={sidebarOpen}
+                    setSidebarOpen={setSidebarOpen}
+                />
+
+                {/* Main Content */}
                 <main className="page-container">
                     <Outlet />
                 </main>
@@ -23,7 +43,9 @@ const MainLayout = () => {
             </div>
 
         </div>
+
     );
-};
+
+}
 
 export default MainLayout;
