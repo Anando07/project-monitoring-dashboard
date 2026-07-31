@@ -8,6 +8,7 @@ import MainLayout from "../layouts/MainLayout";
 import Dashboard from "../pages/Dashboard";
 // import Projects from "../pages/Projects";
 import Projects from "../pages/Projects/Projects";
+import Finance from "../pages/Projects/Finance";
 import Reports from "../pages/Reports";
 import Settings from "../pages/Settings";
 
@@ -39,7 +40,7 @@ const AppRoutes = () => {
 
                 <Route 
                     path="/projects/finance"
-                    element={<Projects />}
+                    element={<Finance />}
                 />
 
                 <Route 

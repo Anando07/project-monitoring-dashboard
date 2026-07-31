@@ -1,0 +1,113 @@
+/* Styling specific to multi-funder breakdowns and responsive dynamic controls */
+
+.funding-section {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.funding-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.funding-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #1e293b;
+}
+
+.add-funder-btn {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+}
+
+.funder-rows-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.funder-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  background-color: #ffffff;
+  padding: 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.flex-2 {
+  flex: 2;
+}
+
+.remove-funder-btn {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  padding: 0.5rem;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+}
+
+.remove-funder-btn:hover {
+  background-color: #fee2e2;
+}
+
+.calculated-total-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #cbd5e1;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.calculated-total-bar strong {
+  font-size: 1.05rem;
+  color: #0f172a;
+}
+
+.funder-pills-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.funder-pill {
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.modal-breakdown-table {
+  margin-top: 0.5rem;
+  width: 100%;
+}
+
+.modal-total-row {
+  background-color: #f8fafc;
+  font-weight: 600;
+}

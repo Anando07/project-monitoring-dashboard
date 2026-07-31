@@ -1,7 +1,18 @@
-import React, { useState } from "react";
-
+import React, { useState, useEffect, useMemo } from "react";
 import "./Projects.css";
-import { Plus, Trash2, Eye, X, FolderPlus } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Eye,
+  Pencil,
+  X,
+  FolderPlus,
+  Search,
+  Printer,
+  Image as ImageIcon,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  Reused from Dashboard.jsx so the visual language stays identical   */
@@ -22,6 +33,9 @@ function Card({ title, action, children, className = "" }) {
 }
 
 const PRIORITIES = ["High", "Medium", "Low"];
+const STATUS_OPTIONS = ["Approved", "Unapproved", "Processing"];
+const PAGE_SIZE = 10;
+const MAX_IMAGE_BYTES = 1 * 1024 * 1024; // 1 MB per image
 
 const priorityPillClass = (priority) =>
   priority === "High"
@@ -30,28 +44,12 @@ const priorityPillClass = (priority) =>
     ? "status-pill-amber"
     : "status-pill-green";
 
-/* ------------------------------------------------------------------ */
-/*  Fund sources are data-driven: to add a new funder (e.g. a new       */
-/*  bilateral donor), add one entry here — the form, table, modal,     */
-/*  and fund-type label all pick it up automatically.                  */
-/* ------------------------------------------------------------------ */
-const FUND_SOURCES = [
-  { key: "fundGovt", label: "Government Fund", short: "GOV", tag: "Gov" },
-  { key: "fundADB", label: "ADB Fund", short: "ADB", tag: "ADB" },
-  { key: "fundWB", label: "World Bank Fund", short: "WB", tag: "WB" },
-  { key: "fundIMF", label: "IMF Fund", short: "IMF", tag: "IMF" },
-  { key: "fundJICA", label: "JICA Fund", short: "JICA", tag: "JICA" },
-  { key: "fundCountry", label: "Other Country Fund", short: "COUNTRY", tag: "Country" },
-  { key: "fundOthers", label: "Other Fund", short: "OTHERS", tag: "Other" },
-];
-
-// Builds the fund-source label from whichever funds are actually present,
-// e.g. "GOV+WB", "ADB+IMF+JICA", "N/A". Driven entirely by FUND_SOURCES so
-// every funder is represented correctly, not just the original three.
-const getFundType = (project) => {
-  const parts = FUND_SOURCES.filter((f) => project[f.key]).map((f) => f.short);
-  return parts.length ? parts.join("+") : "N/A";
-};
+const statusPillClass = (status) =>
+  status === "Approved"
+    ? "status-pill-green"
+    : status === "Processing"
+    ? "status-pill-amber"
+    : "status-pill-red";
 
 // years between two yyyy-mm-dd strings, formatted like "3.5 yr"
 const calcDuration = (start, end) => {
@@ -69,65 +67,39 @@ const formatDate = (isoDate) => {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 };
 
-const EMPTY_FORM = {
-  name: "",
-  pd: "",
-  startDate: "",
-  endDate: "",
-  ...Object.fromEntries(FUND_SOURCES.map((f) => [f.key, ""])),
-  statusPct: 0,
-  priority: "Medium",
+// Pulls the raw number back out of a formatted string like "৳ 100.00 Cr"
+// so an existing project's budget can be dropped back into the number input.
+const parseBudgetNumber = (formatted) => {
+  if (!formatted) return "";
+  const match = String(formatted).match(/[\d.]+/);
+  return match ? match[0] : "";
 };
 
+const EMPTY_FORM = {
+  name: "",
+  startDate: "",
+  endDate: "",
+  totalBudget: "",
+  priority: "Medium",
+  status: "Approved",
+  images: [],
+};
+
+// 12 seed rows so pagination (10/page) is visible without having to add
+// projects manually — page 1 shows 10, page 2 shows the remaining 2.
 const SEED_PROJECTS = [
-  {
-    id: 1,
-    name: "Padma Bridge Project",
-    pd: "Md. Rahman",
-    startDate: "2023-01-01",
-    endDate: "2026-06-30",
-    fundGovt: "৳ 55.00 Cr",
-    fundADB: "৳ 25.00 Cr",
-    fundWB: "৳ 20.00 Cr",
-    fundIMF: "",
-    fundJICA: "",
-    fundCountry: "",
-    fundOthers: "",
-    statusPct: 90,
-    priority: "High",
-  },
-  {
-    id: 2,
-    name: "ICT Infrastructure Project",
-    pd: "Shamim Ahmed",
-    startDate: "2022-09-10",
-    endDate: "2026-05-25",
-    fundGovt: "৳ 18.00 Cr",
-    fundADB: "৳ 10.00 Cr",
-    fundWB: "৳ 7.00 Cr",
-    fundIMF: "",
-    fundJICA: "",
-    fundCountry: "",
-    fundOthers: "",
-    statusPct: 60,
-    priority: "Medium",
-  },
-  {
-    id: 3,
-    name: "Dhaka Mass Transit (MRT) Extension",
-    pd: "Nasrin Sultana",
-    startDate: "2021-03-15",
-    endDate: "2027-12-31",
-    fundGovt: "৳ 40.00 Cr",
-    fundADB: "",
-    fundWB: "",
-    fundIMF: "৳ 12.00 Cr",
-    fundJICA: "৳ 65.00 Cr",
-    fundCountry: "",
-    fundOthers: "",
-    statusPct: 45,
-    priority: "High",
-  },
+  { id: 1, name: "Padma Bridge Project", startDate: "2023-01-01", endDate: "2026-06-30", totalBudget: "৳ 100.00 Cr", priority: "High", status: "Approved", images: [] },
+  { id: 2, name: "ICT Infrastructure Project", startDate: "2022-09-10", endDate: "2026-05-25", totalBudget: "৳ 35.00 Cr", priority: "Medium", status: "Processing", images: [] },
+  { id: 3, name: "Dhaka Mass Transit (MRT) Extension", startDate: "2021-03-15", endDate: "2027-12-31", totalBudget: "৳ 117.00 Cr", priority: "High", status: "Approved", images: [] },
+  { id: 4, name: "Rural Electrification Phase II", startDate: "2022-01-10", endDate: "2025-12-20", totalBudget: "৳ 28.50 Cr", priority: "Medium", status: "Approved", images: [] },
+  { id: 5, name: "Coastal Embankment Improvement", startDate: "2023-05-01", endDate: "2026-04-30", totalBudget: "৳ 42.00 Cr", priority: "High", status: "Processing", images: [] },
+  { id: 6, name: "Digital Land Survey Project", startDate: "2022-11-15", endDate: "2025-08-31", totalBudget: "৳ 19.75 Cr", priority: "Low", status: "Unapproved", images: [] },
+  { id: 7, name: "Primary Healthcare Modernization", startDate: "2023-02-20", endDate: "2026-02-19", totalBudget: "৳ 31.20 Cr", priority: "Medium", status: "Approved", images: [] },
+  { id: 8, name: "Urban Water Supply Upgrade", startDate: "2021-07-01", endDate: "2025-06-30", totalBudget: "৳ 58.40 Cr", priority: "High", status: "Processing", images: [] },
+  { id: 9, name: "Skills Development Training Center", startDate: "2023-09-01", endDate: "2026-08-31", totalBudget: "৳ 12.90 Cr", priority: "Low", status: "Approved", images: [] },
+  { id: 10, name: "River Dredging Program", startDate: "2022-04-12", endDate: "2025-10-15", totalBudget: "৳ 46.60 Cr", priority: "Medium", status: "Unapproved", images: [] },
+  { id: 11, name: "Agricultural Research Institute Upgrade", startDate: "2023-03-01", endDate: "2026-02-28", totalBudget: "৳ 22.10 Cr", priority: "Low", status: "Approved", images: [] },
+  { id: 12, name: "National Highway Widening Project", startDate: "2021-01-01", endDate: "2027-01-01", totalBudget: "৳ 89.00 Cr", priority: "High", status: "Processing", images: [] },
 ];
 
 function Projects() {
@@ -135,6 +107,9 @@ function Projects() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState({});
   const [viewProject, setViewProject] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [editingId, setEditingId] = useState(null);
 
   const handleChange = (field) => (e) => {
     const value = e.target.value;
@@ -142,16 +117,52 @@ function Projects() {
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: null }));
   };
 
+  const handleImagesChange = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const oversized = files.filter((f) => f.size > MAX_IMAGE_BYTES);
+    const valid = files.filter(
+      (f) => f.type.startsWith("image/") && f.size <= MAX_IMAGE_BYTES
+    );
+
+    if (oversized.length > 0) {
+      setErrors((prev) => ({
+        ...prev,
+        images: `${oversized.length} image${oversized.length > 1 ? "s" : ""} skipped — 1 MB max per image.`,
+      }));
+    } else if (errors.images) {
+      setErrors((prev) => ({ ...prev, images: null }));
+    }
+
+    valid.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setForm((prev) => ({ ...prev, images: [...prev.images, reader.result] }));
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // allow re-selecting the same file(s) later
+    e.target.value = "";
+  };
+
+  const removeImage = (index) => {
+    setForm((prev) => ({ ...prev, images: prev.images.filter((_, i) => i !== index) }));
+  };
+
   const validate = () => {
     const next = {};
     if (!form.name.trim()) next.name = "Project name is required";
-    if (!form.pd.trim()) next.pd = "Project director is required";
     if (!form.startDate) next.startDate = "Start date is required";
     if (!form.endDate) next.endDate = "End date is required";
     if (form.startDate && form.endDate && form.endDate < form.startDate) {
       next.endDate = "End date must be after start date";
     }
-    setErrors(next);
+    if (!form.totalBudget || Number(form.totalBudget) <= 0) {
+      next.totalBudget = "Total budget is required";
+    }
+    setErrors((prev) => ({ ...next, images: prev.images }));
     return Object.keys(next).length === 0;
   };
 
@@ -159,38 +170,92 @@ function Projects() {
     e.preventDefault();
     if (!validate()) return;
 
-    const newProject = {
-      id: Date.now(),
+    const projectData = {
       name: form.name.trim(),
-      pd: form.pd.trim(),
       startDate: form.startDate,
       endDate: form.endDate,
-      ...Object.fromEntries(
-        FUND_SOURCES.map((f) => [f.key, form[f.key] ? `৳ ${form[f.key]} Cr` : ""])
-      ),
-      statusPct: Number(form.statusPct) || 0,
+      totalBudget: `৳ ${Number(form.totalBudget).toFixed(2)} Cr`,
       priority: form.priority,
+      status: form.status,
+      images: form.images,
     };
 
-    setProjects((prev) => [newProject, ...prev]);
+    if (editingId) {
+      setProjects((prev) =>
+        prev.map((p) => (p.id === editingId ? { ...p, ...projectData } : p))
+      );
+    } else {
+      setProjects((prev) => [{ id: Date.now(), ...projectData }, ...prev]);
+      setCurrentPage(1);
+    }
+
     setForm(EMPTY_FORM);
+    setEditingId(null);
   };
 
   const handleReset = () => {
     setForm(EMPTY_FORM);
     setErrors({});
+    setEditingId(null);
+  };
+
+  const handleEdit = (project) => {
+    setForm({
+      name: project.name,
+      startDate: project.startDate,
+      endDate: project.endDate,
+      totalBudget: parseBudgetNumber(project.totalBudget),
+      priority: project.priority,
+      status: project.status,
+      images: project.images || [],
+    });
+    setEditingId(project.id);
+    setErrors({});
   };
 
   const handleDelete = (id) => {
     setProjects((prev) => prev.filter((p) => p.id !== id));
+    if (editingId === id) handleReset();
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  /* -------- Search + pagination -------- */
+  const filteredProjects = useMemo(
+    () => projects.filter((p) => p.name.toLowerCase().includes(searchTerm.trim().toLowerCase())),
+    [projects, searchTerm]
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filteredProjects.length / PAGE_SIZE));
+
+  // keep the current page in range whenever the underlying data or filter shrinks it
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [totalPages, currentPage]);
+
+  const pageProjects = filteredProjects.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
+
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+    setCurrentPage(1);
   };
 
   return (
     <div className="dashboard-page">
-      {/* ---------------- Create project form ---------------- */}
-      <Card title="Create Project" action={<FolderPlus size={18} className="card-action-icon" />}>
+      {/* ---------------- Create / Edit project form ---------------- */}
+      <Card
+        className="no-print"
+        title={editingId ? "Edit Project" : "Create Project"}
+        action={<FolderPlus size={18} className="card-action-icon" />}
+      >
         <form className="project-form" onSubmit={handleSubmit} noValidate>
-          <div className="form-grid">
+          {/* 3 fields x 2 rows */}
+          <div className="form-grid form-grid-3">
             <div className="form-group">
               <label htmlFor="name">Project Name</label>
               <input
@@ -202,19 +267,6 @@ function Projects() {
                 className={errors.name ? "input-error" : ""}
               />
               {errors.name && <span className="field-error">{errors.name}</span>}
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="pd">Project Director (PD)</label>
-              <input
-                id="pd"
-                type="text"
-                placeholder="e.g. Md. Rahman"
-                value={form.pd}
-                onChange={handleChange("pd")}
-                className={errors.pd ? "input-error" : ""}
-              />
-              {errors.pd && <span className="field-error">{errors.pd}</span>}
             </div>
 
             <div className="form-group">
@@ -241,21 +293,20 @@ function Projects() {
               {errors.endDate && <span className="field-error">{errors.endDate}</span>}
             </div>
 
-            {/* Fund source inputs, generated from FUND_SOURCES */}
-            {FUND_SOURCES.map((f) => (
-              <div className="form-group" key={f.key}>
-                <label htmlFor={f.key}>{f.label} (Cr)</label>
-                <input
-                  id={f.key}
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={form[f.key]}
-                  onChange={handleChange(f.key)}
-                />
-              </div>
-            ))}
+            <div className="form-group">
+              <label htmlFor="totalBudget">Total Budget (Cr)</label>
+              <input
+                id="totalBudget"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                value={form.totalBudget}
+                onChange={handleChange("totalBudget")}
+                className={errors.totalBudget ? "input-error" : ""}
+              />
+              {errors.totalBudget && <span className="field-error">{errors.totalBudget}</span>}
+            </div>
 
             <div className="form-group">
               <label htmlFor="priority">Priority</label>
@@ -268,112 +319,240 @@ function Projects() {
               </select>
             </div>
 
-            <div className="form-group form-group-wide">
-              <label htmlFor="statusPct">
-                Status <span className="range-value">{form.statusPct}%</span>
-              </label>
-              <input
-                id="statusPct"
-                type="range"
-                min="0"
-                max="100"
-                step="5"
-                value={form.statusPct}
-                onChange={handleChange("statusPct")}
-              />
+            <div className="form-group">
+              <label htmlFor="status">Status</label>
+              <select id="status" value={form.status} onChange={handleChange("status")}>
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
+          {/* Images: own full-width row, separate from the 3x2 grid */}
+          <div className="form-group form-group-wide image-upload-group">
+            <label htmlFor="projectImages">
+              <ImageIcon size={14} className="label-icon" />
+              Images <span className="label-hint">(max 1 MB each)</span>
+            </label>
+            <input
+              id="projectImages"
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImagesChange}
+            />
+            {errors.images && <span className="field-error">{errors.images}</span>}
+
+            {form.images.length > 0 && (
+              <div className="image-preview-list">
+                {form.images.map((src, idx) => (
+                  <div key={idx} className="image-preview-item">
+                    <img src={src} alt={`Preview ${idx + 1}`} />
+                    <button
+                      type="button"
+                      className="image-preview-remove"
+                      onClick={() => removeImage(idx)}
+                      title="Remove image"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="form-actions">
+            {editingId && (
+              <span className="editing-badge">Editing: {form.name || "untitled project"}</span>
+            )}
             <button type="button" className="button-secondary" onClick={handleReset}>
-              Reset
+              {editingId ? "Cancel" : "Reset"}
             </button>
             <button type="submit" className="button-primary">
-              <Plus size={16} />
-              Add Project
+              {editingId ? <Pencil size={16} /> : <Plus size={16} />}
+              {editingId ? "Save Changes" : "Add Project"}
             </button>
           </div>
         </form>
       </Card>
 
       {/* ---------------- Project list ---------------- */}
-      <Card title={`Projects (${projects.length})`}>
-        {projects.length === 0 ? (
+      <Card
+        className="no-print"
+        title={`Projects (${filteredProjects.length})`}
+        action={
+          <div className="header-actions">
+            <div className="search-box">
+              <Search size={16} className="search-icon" />
+              <input
+                type="text"
+                placeholder="Search by project name..."
+                value={searchTerm}
+                onChange={handleSearchChange}
+              />
+            </div>
+            <button type="button" className="button-secondary print-btn" onClick={handlePrint}>
+              <Printer size={16} />
+              Print
+            </button>
+          </div>
+        }
+      >
+        {filteredProjects.length === 0 ? (
           <div className="empty-state">
             <FolderPlus size={28} />
-            <p>No projects yet. Add one using the form above.</p>
+            <p>
+              {projects.length === 0
+                ? "No projects yet. Add one using the form above."
+                : "No projects match your search."}
+            </p>
           </div>
         ) : (
-          <div className="table-overflow">
-            <table className="projects-table">
-              <thead>
-                <tr>
-                  <th>Project / PD</th>
-                  <th>Start Date</th>
-                  <th>End Date</th>
-                  <th>Duration</th>
-                  <th>Fund</th>
-                  <th>Status (%)</th>
-                  <th>Priority</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {projects.map((project) => (
-                  <tr key={project.id}>
-                    <td className="project-info-cell">
-                      <div className="project-name">{project.name}</div>
-                      <div className="project-pd">PD: {project.pd}</div>
-                    </td>
-                    <td>{formatDate(project.startDate)}</td>
-                    <td>{formatDate(project.endDate)}</td>
-                    <td>{calcDuration(project.startDate, project.endDate)}</td>
-                    <td className="project-fund-cell">
-                      <div className="fund-label">{getFundType(project)}</div>
-                      <div className="fund-details">
-                        {FUND_SOURCES.map(
-                          (f) =>
-                            project[f.key] && (
-                              <span key={f.key}>
-                                {f.tag}: {project[f.key]}
-                              </span>
-                            )
-                        )}
-                      </div>
-                    </td>
-                    <td>{project.statusPct}%</td>
-                    <td>
-                      <span className={`status-pill ${priorityPillClass(project.priority)}`}>
-                        {project.priority}
-                      </span>
-                    </td>
-                    <td className="table-action-cell">
-                      <button
-                        className="action-button"
-                        onClick={() => setViewProject(project)}
-                        title="View Details"
-                      >
-                        <Eye size={16} />
-                      </button>
-                      <button
-                        className="action-button action-button-danger"
-                        onClick={() => handleDelete(project.id)}
-                        title="Delete Project"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </td>
+          <>
+            <div className="table-overflow">
+              <table className="projects-table">
+                <thead>
+                  <tr>
+                    <th>Photo</th>
+                    <th>Project Name</th>
+                    <th>Start Date</th>
+                    <th>End Date</th>
+                    <th>Duration</th>
+                    <th>Total Budget</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {pageProjects.map((project) => (
+                    <tr key={project.id}>
+                      <td>
+                        {project.images && project.images.length > 0 ? (
+                          <img className="table-photo" src={project.images[0]} alt={project.name} />
+                        ) : (
+                          <div className="table-photo-placeholder">
+                            <ImageIcon size={18} />
+                          </div>
+                        )}
+                      </td>
+                      <td className="project-info-cell">
+                        <div className="project-name">{project.name}</div>
+                      </td>
+                      <td>{formatDate(project.startDate)}</td>
+                      <td>{formatDate(project.endDate)}</td>
+                      <td>{calcDuration(project.startDate, project.endDate)}</td>
+                      <td>{project.totalBudget}</td>
+                      <td>
+                        <span className={`status-pill ${priorityPillClass(project.priority)}`}>
+                          {project.priority}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`status-pill ${statusPillClass(project.status)}`}>
+                          {project.status}
+                        </span>
+                      </td>
+                      <td className="table-action-cell">
+                        <button
+                          className="action-button"
+                          onClick={() => setViewProject(project)}
+                          title="View Details"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <button
+                          className="action-button action-button-edit"
+                          onClick={() => handleEdit(project)}
+                          title="Edit Project"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          className="action-button action-button-danger"
+                          onClick={() => handleDelete(project.id)}
+                          title="Delete Project"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* -------- Pagination: 10 rows per page -------- */}
+            {totalPages > 1 && (
+              <div className="pagination">
+                <button
+                  type="button"
+                  className="pagination-btn"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="pagination-info">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  className="pagination-btn"
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            )}
+          </>
         )}
       </Card>
 
-      {/* ---------------- View modal (same pattern as Dashboard) ---------------- */}
+      {/* ---------------- Print-only table: every project, no pagination ---------------- */}
+      <div className="print-table-wrapper">
+        <h2 className="print-title">All Projects</h2>
+        <p className="print-subtitle">
+          Generated {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+          {" · "}
+          {filteredProjects.length} project{filteredProjects.length !== 1 ? "s" : ""}
+        </p>
+        <table className="projects-table print-table">
+          <thead>
+            <tr>
+              <th>Project Name</th>
+              <th>Start Date</th>
+              <th>End Date</th>
+              <th>Duration</th>
+              <th>Total Budget</th>
+              <th>Priority</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredProjects.map((project) => (
+              <tr key={project.id}>
+                <td>{project.name}</td>
+                <td>{formatDate(project.startDate)}</td>
+                <td>{formatDate(project.endDate)}</td>
+                <td>{calcDuration(project.startDate, project.endDate)}</td>
+                <td>{project.totalBudget}</td>
+                <td>{project.priority}</td>
+                <td>{project.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ---------------- View modal ---------------- */}
       {viewProject && (
-        <div className="modal-overlay" onClick={() => setViewProject(null)}>
+        <div className="modal-overlay no-print" onClick={() => setViewProject(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{viewProject.name}</h2>
@@ -383,13 +562,22 @@ function Projects() {
             </div>
 
             <div className="modal-body">
+              {viewProject.images && viewProject.images.length > 0 && (
+                <div className="modal-section">
+                  <h3>Images</h3>
+                  <div className="image-preview-list">
+                    {viewProject.images.map((src, idx) => (
+                      <div key={idx} className="image-preview-item image-preview-item-static">
+                        <img src={src} alt={`${viewProject.name} ${idx + 1}`} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="modal-section">
                 <h3>Project Information</h3>
                 <div className="modal-grid">
-                  <div className="modal-item">
-                    <label>Project Director (PD)</label>
-                    <p>{viewProject.pd}</p>
-                  </div>
                   <div className="modal-item">
                     <label>Start Date</label>
                     <p>{formatDate(viewProject.startDate)}</p>
@@ -403,6 +591,10 @@ function Projects() {
                     <p>{calcDuration(viewProject.startDate, viewProject.endDate)}</p>
                   </div>
                   <div className="modal-item">
+                    <label>Total Budget</label>
+                    <p>{viewProject.totalBudget}</p>
+                  </div>
+                  <div className="modal-item">
                     <label>Priority</label>
                     <p>
                       <span className={`status-pill ${priorityPillClass(viewProject.priority)}`}>
@@ -410,48 +602,12 @@ function Projects() {
                       </span>
                     </p>
                   </div>
-                </div>
-              </div>
-
-              <div className="modal-section">
-                <h3>Funding Information</h3>
-                <div className="modal-grid">
-                  {FUND_SOURCES.map((f) => (
-                    <div className="modal-item" key={f.key}>
-                      <label>{f.label}</label>
-                      <p>{viewProject[f.key] || "N/A"}</p>
-                    </div>
-                  ))}
                   <div className="modal-item">
-                    <label>Fund Source</label>
-                    <p>{getFundType(viewProject)}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="modal-section">
-                <h3>Project Status</h3>
-                <div className="modal-grid">
-                  <div className="modal-item full-width">
-                    <label>Progress</label>
-                    <div className="progress-track" style={{ height: "8px", marginTop: "8px" }}>
-                      <div
-                        className="progress-fill"
-                        style={{
-                          width: `${viewProject.statusPct}%`,
-                          backgroundColor:
-                            viewProject.statusPct >= 75
-                              ? "#22c55e"
-                              : viewProject.statusPct >= 50
-                              ? "#3b82f6"
-                              : viewProject.statusPct >= 25
-                              ? "#f59e0b"
-                              : "#ef4444",
-                        }}
-                      />
-                    </div>
-                    <p style={{ marginTop: "8px", fontSize: "14px", fontWeight: "600" }}>
-                      {viewProject.statusPct}% Complete
+                    <label>Status</label>
+                    <p>
+                      <span className={`status-pill ${statusPillClass(viewProject.status)}`}>
+                        {viewProject.status}
+                      </span>
                     </p>
                   </div>
                 </div>
