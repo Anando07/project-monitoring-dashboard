@@ -6,9 +6,10 @@ import MainLayout from "../layouts/MainLayout";
 
 
 import Dashboard from "../pages/Dashboard";
-// import Projects from "../pages/Projects";
 import Projects from "../pages/Projects/Projects";
+import Director from "../pages/Projects/Director";
 import Finance from "../pages/Projects/Finance";
+import FinancialProgress from "../pages/Projects/FinancialProgress";
 import Reports from "../pages/Reports";
 import Settings from "../pages/Settings";
 
@@ -45,12 +46,12 @@ const AppRoutes = () => {
 
                 <Route 
                     path="/projects/director"
-                    element={<Projects />}
+                    element={<Director />}
                 />
 
                 <Route 
                     path="/projects/financial/progress"
-                    element={<Projects />}
+                    element={<FinancialProgress />}
                 />
 
                 <Route 
