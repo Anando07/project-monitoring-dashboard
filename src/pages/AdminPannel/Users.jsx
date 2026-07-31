@@ -35,11 +35,18 @@ const MINISTRIES_DIVISIONS = [
 
 // Updated User Roles
 const USER_ROLES = [
+  "Administrator",
   "Super Admin",
   "Admin",
   "Visitor",
+  "Project Director",
+  "Assistant Project Director",
+  "Project Officer",
+  "Project Engineer",
+  "Project Supervisor",
   "Entry User",
-  "User Add Role"
+  "User Add Role",
+  "No Role",
 ];
 
 const INITIAL_FORM_STATE = {
