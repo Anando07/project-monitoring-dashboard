@@ -10,6 +10,7 @@ import Projects from "../pages/Projects/Projects";
 import Director from "../pages/Projects/Director";
 import Finance from "../pages/Projects/Finance";
 import FinancialProgress from "../pages/Projects/FinancialProgress";
+import PhysicalProgress from "../pages/Projects/PhysicalProgress";
 import Reports from "../pages/Reports";
 import Settings from "../pages/Settings";
 
@@ -56,7 +57,7 @@ const AppRoutes = () => {
 
                 <Route 
                     path="/projects/physical/progress"
-                    element={<Projects />}
+                    element={<PhysicalProgress />}
                 />
 
                 <Route 
