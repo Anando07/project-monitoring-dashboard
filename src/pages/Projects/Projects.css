@@ -1,0 +1,119 @@
+/* Styles for elements introduced by ProjectForm.jsx that aren't already
+   defined in Dashboard.css. Reuses the same color palette / radii so it
+   drops in seamlessly next to the rest of the dashboard. */
+
+.project-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group-wide {
+  grid-column: 1 / -1;
+}
+
+.form-group label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.range-value {
+  float: right;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"],
+.form-group input[type="date"],
+.form-group select {
+  height: 40px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 14px;
+  color: #1e293b;
+  background-color: #f8fafc;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  outline: none;
+}
+
+.form-group input[type="text"]:focus,
+.form-group input[type="number"]:focus,
+.form-group input[type="date"]:focus,
+.form-group select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  background-color: #ffffff;
+}
+
+.form-group input.input-error {
+  border-color: #ef4444;
+  background-color: #fef2f2;
+}
+
+.field-error {
+  font-size: 12px;
+  color: #dc2626;
+}
+
+.form-group input[type="range"] {
+  width: 100%;
+  accent-color: #2563eb;
+  height: 6px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.form-actions .button-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-action-icon {
+  color: #2563eb;
+}
+
+.action-button-danger {
+  color: #dc2626;
+}
+
+.action-button-danger:hover {
+  background-color: #fee2e2;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 0;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.empty-state p {
+  font-size: 14px;
+  margin: 0;
+}

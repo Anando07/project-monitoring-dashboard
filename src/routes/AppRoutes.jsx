@@ -6,7 +6,8 @@ import MainLayout from "../layouts/MainLayout";
 
 
 import Dashboard from "../pages/Dashboard";
-import Projects from "../pages/Projects";
+// import Projects from "../pages/Projects";
+import Projects from "../pages/Projects/Projects";
 import Reports from "../pages/Reports";
 import Settings from "../pages/Settings";
 
@@ -32,7 +33,37 @@ const AppRoutes = () => {
 
 
                 <Route 
-                    path="projects"
+                    path="/projects/create"
+                    element={<Projects />}
+                />
+
+                <Route 
+                    path="/projects/finance"
+                    element={<Projects />}
+                />
+
+                <Route 
+                    path="/projects/director"
+                    element={<Projects />}
+                />
+
+                <Route 
+                    path="/projects/financial/progress"
+                    element={<Projects />}
+                />
+
+                <Route 
+                    path="/projects/physical/progress"
+                    element={<Projects />}
+                />
+
+                <Route 
+                    path="/projects/achievement"
+                    element={<Projects />}
+                />
+
+                <Route 
+                    path="/projects/location"
                     element={<Projects />}
                 />
 

@@ -4,7 +4,9 @@
     box-sizing:border-box;
 }
 
-/* Sidebar */
+/* =========================
+   Sidebar
+========================= */
 
 .sidebar{
     position:fixed;
@@ -124,8 +126,17 @@
     padding:14px 16px;
     margin-bottom:8px;
     border-radius:12px;
-    cursor:pointer;
+    text-decoration:none;
+    color:#ffffff;
     transition:.3s;
+}
+
+.item:hover{
+    background:#2563eb;
+}
+
+.item.active{
+    background:#2563eb;
 }
 
 .item svg{
@@ -137,12 +148,82 @@
     white-space:nowrap;
 }
 
-.item:hover{
-    background:#1d4ed8;
+/* =========================
+   Expandable groups (Projects, Reports, Admin Panel, Settings)
+========================= */
+
+.menu-group{
+    display:flex;
+    flex-direction:column;
 }
 
-.item.active{
+/* Parent row reuses the .item look but is a <button>, not a <NavLink>,
+   so reset default button styling to match. */
+.item.has-submenu{
+    width:100%;
+    background:none;
+    border:none;
+    font:inherit;
+    cursor:pointer;
+    justify-content:flex-start;
+}
+
+.item.has-submenu span{
+    flex:1;
+    text-align:left;
+}
+
+.item.has-submenu:focus-visible{
+    outline:2px solid #60a5fa;
+    outline-offset:-2px;
+}
+
+.chevron{
+    font-size:12px;
+    opacity:.7;
+    transition:transform .2s ease;
+    flex-shrink:0;
+}
+
+.chevron.rotated{
+    transform:rotate(180deg);
+}
+
+.submenu{
+    display:flex;
+    flex-direction:column;
+    padding-left:28px;
+    margin:2px 0 8px;
+}
+
+.submenu-item{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 12px;
+    margin-bottom:4px;
+    border-radius:8px;
+    font-size:13.5px;
+    color:#fff;
+    text-decoration:none;
+    opacity:.75;
+    transition:.3s;
+}
+
+.submenu-item svg{
+    min-width:16px;
+    font-size:14px;
+}
+
+.submenu-item:hover{
+    background:rgba(255,255,255,.08);
+    opacity:1;
+}
+
+.submenu-item.active{
     background:#2563eb;
+    opacity:1;
+    font-weight:600;
 }
 
 /* =========================
@@ -198,6 +279,17 @@
 }
 
 .sidebar.mini .item span{
+    display:none;
+}
+
+/* Belt-and-suspenders: the sidebar's JSX already skips rendering the
+   chevron/submenu when collapsed, but these rules keep the collapsed
+   state correct at the CSS layer too, in case that logic ever changes. */
+.sidebar.mini .chevron{
+    display:none;
+}
+
+.sidebar.mini .submenu{
     display:none;
 }
 
