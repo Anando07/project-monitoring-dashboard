@@ -13,6 +13,7 @@ import FinancialProgress from "../pages/Projects/FinancialProgress";
 import PhysicalProgress from "../pages/Projects/PhysicalProgress";
 import Reports from "../pages/Reports";
 import Settings from "../pages/Settings";
+import Users from "../pages/AdminPannel/Users";
 
 
 const AppRoutes = () => {
@@ -80,6 +81,11 @@ const AppRoutes = () => {
                 <Route 
                     path="settings"
                     element={<Settings />}
+                />
+
+                <Route 
+                    path="/admin/users"
+                    element={<Users />}
                 />
 
 
