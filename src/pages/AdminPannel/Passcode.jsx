@@ -1,52 +1,31 @@
-import React, { useState, useMemo } from "react";
-import "./Passcode.css";
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  getAllPasscodes,
+  createPasscodeApi,
+  updatePasscodeApi,
+  deletePasscodeApi
+} from "../../services/PasscodeService";
+import { getAllUsers } from "../../services/UserService";
 import {
   KeyRound,
   Search,
   Printer,
   Trash2,
   Edit2,
-  Eye,
-  EyeOff,
-  UserCheck,
-  Shield,
-  X,
   AlertCircle,
   RotateCcw,
   Check,
-  Lock
+  Lock,
+  Loader,
+  Calendar,
+  Shield,
+  Building,
+  Building2,
+  Eye,
+  EyeOff,
+  X
 } from "lucide-react";
 
-/* ------------------------------------------------------------------ */
-/*  Mirrors the Users directory this page issues passwords against.    */
-/*  Each password record is tied back to one of these by user_id.      */
-/* ------------------------------------------------------------------ */
-const USERS_LIST = [
-  {
-    id: 1,
-    fullName: "A. S. M. Kabir",
-    designation: "Director General",
-    ministryDivision: "Road Transport and Highways Division",
-    role: "Super Admin"
-  },
-  {
-    id: 2,
-    fullName: "Nusrat Jahan",
-    designation: "Deputy Director (Planning)",
-    ministryDivision: "Local Government Division",
-    role: "Admin"
-  },
-  {
-    id: 3,
-    fullName: "Shamim Ahmed",
-    designation: "Project Director",
-    ministryDivision: "Power Division",
-    role: "Project Director"
-  }
-];
-
-// Each rule's `test` runs against the live password on every keystroke so
-// the checklist below the field updates in real time.
 const PASSWORD_RULES = [
   { key: "length", label: "At least 8 characters", test: (v) => v.length >= 8 },
   { key: "upper", label: "One uppercase letter (A-Z)", test: (v) => /[A-Z]/.test(v) },
@@ -63,40 +42,56 @@ const getStrengthLabel = (passedCount) => {
   return "Strong";
 };
 
-const strengthClass = (label) =>
-  label === "Strong" ? "strength-strong" : label === "Medium" ? "strength-medium" : "strength-weak";
+// Returns date string in YYYY-MM-DD format, defaulting to 3 months from now
+const getDefaultExpiryDate = () => {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 3);
+  return d.toISOString().slice(0, 10);
+};
 
 const INITIAL_FORM_STATE = {
   userId: "",
   newPassword: "",
-  confirmPassword: ""
+  confirmPassword: "",
+  expiresAt: getDefaultExpiryDate()
 };
 
-const INITIAL_RECORDS = [
-  {
-    id: 1,
-    userId: 1,
-    fullName: "A. S. M. Kabir",
-    designation: "Director General",
-    ministryDivision: "Road Transport and Highways Division",
-    role: "Super Admin",
-    password: "Kabir@2026!Strong",
-    strength: "Strong",
-    updatedAt: "2026-06-14"
-  }
-];
-
 function Passcode() {
-  const [records, setRecords] = useState(INITIAL_RECORDS);
+  const [users, setUsers] = useState([]);
+  const [records, setRecords] = useState([]);
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
+  const [editingId, setEditingId] = useState(null);
   const [errors, setErrors] = useState({});
+
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState(null);
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
   const [searchTerm, setSearchTerm] = useState("");
-  const [viewItem, setViewItem] = useState(null);
-  const [viewPasswordVisible, setViewPasswordVisible] = useState(false);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    setApiError(null);
+    try {
+      const [usersRes, passcodesRes] = await Promise.all([
+        getAllUsers().catch(() => ({ data: [] })),
+        getAllPasscodes().catch(() => ({ data: [] }))
+      ]);
+
+      setUsers(usersRes.data || []);
+      setRecords(passcodesRes.data || []);
+      setLoading(false);
+    } catch (error) {
+      console.error("Failed to load passcode data:", error);
+      setApiError("Unable to fetch user or passcode records from server.");
+      setLoading(false);
+    }
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -105,7 +100,11 @@ function Passcode() {
   };
 
   const handleReset = () => {
-    setFormData(INITIAL_FORM_STATE);
+    setFormData({
+      ...INITIAL_FORM_STATE,
+      expiresAt: getDefaultExpiryDate()
+    });
+    setEditingId(null);
     setErrors({});
     setShowPassword(false);
     setShowConfirmPassword(false);
@@ -117,7 +116,7 @@ function Passcode() {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.userId) newErrors.userId = "Select a user to reset the password for.";
+    if (!formData.userId) newErrors.userId = "Select a user to set password for.";
 
     if (!formData.newPassword) {
       newErrors.newPassword = "New password is required.";
@@ -131,6 +130,8 @@ function Passcode() {
       newErrors.confirmPassword = "Passwords do not match.";
     }
 
+    if (!formData.expiresAt) newErrors.expiresAt = "Expiration date is required.";
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -139,36 +140,53 @@ function Passcode() {
     e.preventDefault();
     if (!validateForm()) return;
 
-    const user = USERS_LIST.find((u) => u.id === Number(formData.userId));
-    const today = new Date().toISOString().slice(0, 10);
+    // Format date as ISO LocalDateTime for backend
+    const formattedExpiry = `${formData.expiresAt}T23:59:59`;
 
-    const recordData = {
-      userId: user.id,
-      fullName: user.fullName,
-      designation: user.designation,
-      ministryDivision: user.ministryDivision,
-      role: user.role,
-      password: formData.newPassword,
-      strength: strengthLabel,
-      updatedAt: today
+    const payload = {
+      userId: Number(formData.userId),
+      passcode: formData.newPassword,
+      active: true,
+      expiresAt: formattedExpiry
     };
 
-    // One active password record per user: overwrite if this user already
-    // has one, otherwise create a new entry — mirrors how a real reset
-    // replaces the previous credential rather than stacking duplicates.
-    setRecords((prev) => {
-      const existing = prev.find((r) => r.userId === user.id);
-      if (existing) {
-        return prev.map((r) => (r.userId === user.id ? { ...r, ...recordData, id: r.id } : r));
-      }
-      return [{ id: Date.now(), ...recordData }, ...prev];
-    });
-
-    handleReset();
+    if (editingId) {
+      updatePasscodeApi(editingId, payload)
+        .then(() => {
+          fetchData();
+          handleReset();
+        })
+        .catch((err) => {
+          console.error("Error updating passcode:", err);
+          alert("Failed to update passcode in database.");
+        });
+    } else {
+      createPasscodeApi(payload)
+        .then(() => {
+          fetchData();
+          handleReset();
+        })
+        .catch((err) => {
+          console.error("Error creating passcode:", err);
+          alert("Failed to save passcode to database.");
+        });
+    }
   };
 
   const handleEdit = (record) => {
-    setFormData({ userId: String(record.userId), newPassword: "", confirmPassword: "" });
+    const targetUserId = record.user?.id || record.userId;
+    setEditingId(record.id);
+
+    const existingDate = record.expiresAt
+      ? String(record.expiresAt).slice(0, 10)
+      : getDefaultExpiryDate();
+
+    setFormData({
+      userId: String(targetUserId),
+      newPassword: "",
+      confirmPassword: "",
+      expiresAt: existingDate
+    });
     setErrors({});
     setShowPassword(false);
     setShowConfirmPassword(false);
@@ -177,372 +195,472 @@ function Passcode() {
 
   const handleDelete = (id) => {
     if (window.confirm("Remove this password record?")) {
-      setRecords((prev) => prev.filter((item) => item.id !== id));
+      deletePasscodeApi(id)
+        .then(() => fetchData())
+        .catch((err) => {
+          console.error("Error deleting passcode:", err);
+          alert("Could not delete passcode.");
+        });
     }
+  };
+
+  // Safely resolves user metadata by looking up ID in the users list
+  const resolveUserDetail = (record) => {
+    const targetUserId = record.userId || (record.user ? record.user.id : null);
+
+    const foundUser = users.find(
+      (u) => String(u.id) === String(targetUserId)
+    ) || {};
+
+    return {
+      userId: targetUserId || record.id,
+      userName: foundUser.name || (targetUserId ? `User #${targetUserId}` : "Officer"),
+      designation: foundUser.designation || "Officer",
+      officeName: foundUser.officeName || "HQ",
+      minDiv: foundUser.minDiv || "Internal Resources Division",
+      roleName: foundUser.role?.roleName || foundUser.roleName || "User",
+      expiresAt: record.expiresAt
+        ? String(record.expiresAt).slice(0, 10)
+        : getDefaultExpiryDate()
+    };
   };
 
   const filteredRecords = useMemo(() => {
     const query = searchTerm.toLowerCase();
-    return records.filter(
-      (item) =>
-        item.fullName.toLowerCase().includes(query) ||
-        item.ministryDivision.toLowerCase().includes(query) ||
-        item.role.toLowerCase().includes(query) ||
-        String(item.userId).includes(query)
-    );
-  }, [records, searchTerm]);
+    return records.filter((item) => {
+      const details = resolveUserDetail(item);
+      return (
+        details.userName.toLowerCase().includes(query) ||
+        details.designation.toLowerCase().includes(query) ||
+        details.officeName.toLowerCase().includes(query) ||
+        details.minDiv.toLowerCase().includes(query) ||
+        details.roleName.toLowerCase().includes(query) ||
+        String(details.userId).includes(query)
+      );
+    });
+  }, [records, users, searchTerm]);
 
   return (
-    <div className="dashboard-page">
-      {/* -------------------- Reset password form -------------------- */}
-      <div className="dashboard-card no-print">
-        <div className="dashboard-card-header">
-          <h3>Reset User Password</h3>
-          <KeyRound className="card-action-icon" size={20} />
+    <div className="container-fluid py-4 bg-light">
+      {/* Reset Password Form Card */}
+      <div className="card shadow-sm mb-4 border-0">
+        <div className="card-header bg-white d-flex justify-content-between align-items-center py-3 border-bottom">
+          <h5 className="mb-0 text-primary fw-bold">
+            {editingId ? "Update User Password" : "Reset / Set User Password"}
+          </h5>
+          <KeyRound className="text-primary" size={22} />
         </div>
 
-        <form onSubmit={handleSubmit} className="project-form" noValidate>
-          <div className="form-grid form-grid-3">
-            <div className="form-group">
-              <label>
-                Select User <span className="req-star">*</span>
-              </label>
-              <select
-                name="userId"
-                value={formData.userId}
-                onChange={handleInputChange}
-                className={errors.userId ? "input-error" : ""}
-              >
-                <option value="">-- Select a user (user_id) --</option>
-                {USERS_LIST.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    #{u.id} — {u.fullName} ({u.role})
-                  </option>
-                ))}
-              </select>
-              {errors.userId && <span className="field-error">{errors.userId}</span>}
-            </div>
-
-            <div className="form-group">
-              <label>
-                New Password <span className="req-star">*</span>
-              </label>
-              <div className="password-field-wrapper">
-                <Lock size={14} className="password-lock-icon" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  name="newPassword"
-                  placeholder="Enter new password"
-                  value={formData.newPassword}
+        <div className="card-body p-4">
+          <form onSubmit={handleSubmit} noValidate>
+            <div className="row g-3 mb-3">
+              {/* 1. Select User Dropdown */}
+              <div className="col-md-3">
+                <label className="form-label fw-semibold">
+                  Select User <span className="text-danger">*</span>
+                </label>
+                <select
+                  name="userId"
+                  value={formData.userId}
                   onChange={handleInputChange}
-                  className={errors.newPassword ? "input-error" : ""}
-                />
-                <button
-                  type="button"
-                  className="eye-toggle-btn"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  title={showPassword ? "Hide password" : "Show password"}
+                  disabled={Boolean(editingId)}
+                  className={`form-select ${errors.userId ? "is-invalid" : ""}`}
                 >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+                  <option value="">-- Select User --</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      #{u.id} - {u.name} ({u.designation || "Officer"})
+                    </option>
+                  ))}
+                </select>
+                {errors.userId && <div className="invalid-feedback">{errors.userId}</div>}
               </div>
-              {errors.newPassword && <span className="field-error">{errors.newPassword}</span>}
-            </div>
 
-            <div className="form-group">
-              <label>
-                Confirm Password <span className="req-star">*</span>
-              </label>
-              <div className="password-field-wrapper">
-                <Lock size={14} className="password-lock-icon" />
-                <input
-                  type={showConfirmPassword ? "text" : "password"}
-                  name="confirmPassword"
-                  placeholder="Re-enter new password"
-                  value={formData.confirmPassword}
-                  onChange={handleInputChange}
-                  className={errors.confirmPassword ? "input-error" : ""}
-                />
-                <button
-                  type="button"
-                  className="eye-toggle-btn"
-                  onClick={() => setShowConfirmPassword((prev) => !prev)}
-                  title={showConfirmPassword ? "Hide password" : "Show password"}
-                >
-                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-              {errors.confirmPassword && (
-                <span className="field-error">{errors.confirmPassword}</span>
-              )}
-              {!errors.confirmPassword &&
-                formData.confirmPassword &&
-                formData.confirmPassword === formData.newPassword && (
-                  <span className="field-success">
-                    <Check size={12} /> Passwords match
+              {/* 2. New Password */}
+              <div className="col-md-3">
+                <label className="form-label fw-semibold">
+                  New Password <span className="text-danger">*</span>
+                </label>
+                <div className="input-group">
+                  <span className="input-group-text bg-light">
+                    <Lock size={15} />
                   </span>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="newPassword"
+                    placeholder="Enter new password"
+                    value={formData.newPassword}
+                    onChange={handleInputChange}
+                    className={`form-control ${errors.newPassword ? "is-invalid" : ""}`}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                  >
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                {errors.newPassword && <div className="text-danger small mt-1">{errors.newPassword}</div>}
+              </div>
+
+              {/* 3. Confirm Password */}
+              <div className="col-md-3">
+                <label className="form-label fw-semibold">
+                  Confirm Password <span className="text-danger">*</span>
+                </label>
+                <div className="input-group">
+                  <span className="input-group-text bg-light">
+                    <Lock size={15} />
+                  </span>
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    name="confirmPassword"
+                    placeholder="Re-enter new password"
+                    value={formData.confirmPassword}
+                    onChange={handleInputChange}
+                    className={`form-control ${errors.confirmPassword ? "is-invalid" : ""}`}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                  >
+                    {showConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                {errors.confirmPassword && (
+                  <div className="text-danger small mt-1">{errors.confirmPassword}</div>
                 )}
-            </div>
-          </div>
-
-          {/* Live strength meter + requirement checklist */}
-          {formData.newPassword && (
-            <div className="password-strength-panel">
-              <div className="strength-meter-row">
-                <span className="strength-meter-label">Password strength:</span>
-                <span className={`strength-badge ${strengthClass(strengthLabel)}`}>
-                  {strengthLabel}
-                </span>
-              </div>
-              <div className="strength-bar-track">
-                <div
-                  className={`strength-bar-fill ${strengthClass(strengthLabel)}`}
-                  style={{ width: `${(passedRules.length / PASSWORD_RULES.length) * 100}%` }}
-                />
+                {!errors.confirmPassword &&
+                  formData.confirmPassword &&
+                  formData.confirmPassword === formData.newPassword && (
+                    <div className="text-success small mt-1 d-flex align-items-center gap-1">
+                      <Check size={13} /> Passwords match
+                    </div>
+                  )}
               </div>
 
-              <ul className="password-rules-list">
-                {PASSWORD_RULES.map((rule) => {
-                  const passed = rule.test(formData.newPassword);
-                  return (
-                    <li key={rule.key} className={passed ? "rule-passed" : "rule-pending"}>
-                      {passed ? <Check size={13} /> : <X size={13} />}
-                      {rule.label}
-                    </li>
-                  );
-                })}
-              </ul>
+              {/* 4. Manual Expiration Date */}
+              <div className="col-md-3">
+                <label className="form-label fw-semibold">
+                  Expiration Date <span className="text-danger">*</span>
+                </label>
+                <div className="input-group">
+                  <span className="input-group-text bg-light">
+                    <Calendar size={15} />
+                  </span>
+                  <input
+                    type="date"
+                    name="expiresAt"
+                    value={formData.expiresAt}
+                    onChange={handleInputChange}
+                    className={`form-control ${errors.expiresAt ? "is-invalid" : ""}`}
+                  />
+                </div>
+                {errors.expiresAt && <div className="text-danger small mt-1">{errors.expiresAt}</div>}
+              </div>
             </div>
-          )}
 
-          <div className="form-actions">
-            <button type="button" onClick={handleReset} className="button-secondary" title="Reset Form">
-              <RotateCcw size={15} /> Reset
-            </button>
-            <button type="submit" className="button-primary">
-              <KeyRound size={16} /> Set Password
-            </button>
-          </div>
-        </form>
+            {/* Live Password Strength Checklist */}
+            {formData.newPassword && (
+              <div className="bg-light border rounded p-3 mb-3">
+                <div className="d-flex align-items-center justify-content-between mb-2">
+                  <span className="fw-semibold small">Password Strength:</span>
+                  <span
+                    className={`${
+                      strengthLabel === "Strong"
+                        ? "bg-success"
+                        : strengthLabel === "Medium"
+                        ? "bg-warning text-dark"
+                        : "bg-danger"
+                    }`}
+                  >
+                    {strengthLabel}
+                  </span>
+                </div>
+                <div className="progress mb-3" style={{ height: "6px" }}>
+                  <div
+                    className={`progress-bar ${
+                      strengthLabel === "Strong"
+                        ? "bg-success"
+                        : strengthLabel === "Medium"
+                        ? "bg-warning"
+                        : "bg-danger"
+                    }`}
+                    style={{ width: `${(passedRules.length / PASSWORD_RULES.length) * 100}%` }}
+                  ></div>
+                </div>
+
+                <div className="row g-2">
+                  {PASSWORD_RULES.map((rule) => {
+                    const passed = rule.test(formData.newPassword);
+                    return (
+                      <div key={rule.key} className="col-md-4 col-6">
+                        <small
+                          className={`d-flex align-items-center gap-1 ${
+                            passed ? "text-success fw-semibold" : "text-muted"
+                          }`}
+                        >
+                          {passed ? <Check size={13} /> : <X size={13} />}
+                          {rule.label}
+                        </small>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Form Action Buttons */}
+            <div className="d-flex justify-content-end align-items-center gap-2 pt-2 border-top">
+              <button
+                type="button"
+                onClick={handleReset}
+                className="btn btn-outline-secondary d-inline-flex align-items-center gap-1"
+              >
+                <RotateCcw size={15} /> Cancel / Reset
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary d-inline-flex align-items-center gap-1 px-3"
+              >
+                <KeyRound size={16} /> {editingId ? "Update Password" : "Set Password"}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
 
-      {/* -------------------- Records table -------------------- */}
-      <div className="dashboard-card no-print">
-        <div className="dashboard-card-header">
-          <h3>Password Records</h3>
-          <div className="header-actions">
-            <div className="search-box">
-              <Search size={14} className="search-icon" />
+      {/* Passcode Directory Table Card */}
+      <div className="card shadow-sm border-0">
+        <div className="card-header bg-white d-flex flex-wrap justify-content-between align-items-center py-3 gap-2 border-bottom">
+          <div>
+            <h5 className="mb-0 fw-bold text-dark">Password / Passcode Records</h5>
+            <small className="text-muted">Total Records: {filteredRecords.length}</small>
+          </div>
+          <div className="d-flex align-items-center gap-2">
+            <div className="input-group input-group-sm" style={{ width: "260px" }}>
+              <span className="input-group-text bg-light border-end-0">
+                <Search size={14} />
+              </span>
               <input
                 type="text"
-                placeholder="Search by user, role, ministry..."
+                className="form-control bg-light border-start-0"
+                placeholder="Search user ID, role, ministry..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <button onClick={() => window.print()} className="button-secondary print-btn" title="Print Records">
-              <Printer size={14} /> Print
+            <button
+              onClick={() => window.print()}
+              className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"
+            >
+              <Printer size={14} /> Print List
             </button>
           </div>
         </div>
 
-        <div className="table-overflow">
-          <table className="projects-table">
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Ministry / Role</th>
-                <th>Password</th>
-                <th>Strength</th>
-                <th>Last Updated</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRecords.length > 0 ? (
-                filteredRecords.map((record) => (
-                  <tr key={record.id}>
-                    <td>
-                      <div className="project-name-tag">{record.fullName}</div>
-                      <span className="sub-text">user_id: #{record.userId}</span>
-                    </td>
-                    <td>
-                      <div className="sub-text">{record.ministryDivision}</div>
-                      <span className="duty-pill duty-pill-blue">{record.role}</span>
-                    </td>
-                    <td>
-                      <span className="masked-password">
-                        {"•".repeat(Math.min(record.password.length, 10))}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`strength-badge ${strengthClass(record.strength)}`}>
-                        {record.strength}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="sub-text">{record.updatedAt}</span>
-                    </td>
-                    <td>
-                      <div className="table-action-cell" style={{ justifyContent: "flex-end" }}>
-                        <button
-                          onClick={() => {
-                            setViewItem(record);
-                            setViewPasswordVisible(false);
-                          }}
-                          className="action-button"
-                          title="View Record"
-                        >
-                          <Eye size={15} />
-                        </button>
-                        <button
-                          onClick={() => handleEdit(record)}
-                          className="action-button action-button-edit"
-                          title="Reset Again"
-                        >
-                          <Edit2 size={15} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(record.id)}
-                          className="action-button action-button-danger"
-                          title="Delete Record"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </td>
+        <div className="card-body p-0">
+          <div className="table-responsive">
+            {loading ? (
+              <div className="text-center py-5">
+                <Loader size={28} className="spinner-border text-primary border-0" />
+                <p className="mt-2 text-muted">Loading password records...</p>
+              </div>
+            ) : apiError ? (
+              <div className="text-center py-5 text-danger">
+                <AlertCircle size={32} />
+                <p className="mt-2 fw-semibold">{apiError}</p>
+              </div>
+            ) : (
+              <table className="table table-hover align-middle mb-0">
+                <thead className="table-dark">
+                  <tr>
+                    <th style={{ width: "28%" }}>User Details</th>
+                    <th style={{ width: "28%" }}>Office & Ministry</th>
+                    <th style={{ width: "16%" }}>Role</th>
+                    <th style={{ width: "16%" }}>Expiration Date</th>
+                    <th style={{ width: "12%" }} className="text-end">
+                      Actions
+                    </th>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="6">
-                    <div className="empty-state">
-                      <AlertCircle size={32} />
-                      <p>No password records found matching your search.</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {filteredRecords.length > 0 ? (
+                    filteredRecords.map((record) => {
+                      const details = resolveUserDetail(record);
+
+                      return (
+                        <tr key={record.id} style={{ verticalAlign: "middle" }}>
+                          {/* 1. User ID, Name & Designation */}
+                          <td className="align-middle">
+                            <div className="d-flex align-items-center gap-2 py-1">
+                              <div
+                                className="border rounded-circle bg-light d-flex align-items-center justify-content-center overflow-hidden flex-shrink-0"
+                                style={{ width: "38px", height: "38px" }}
+                              >
+                                <Shield size={18} className="text-secondary" />
+                              </div>
+                              <div>
+                                <div className="d-flex align-items-center gap-1">
+                                  <span className="bg-secondary font-monospace" style={{ fontSize: "0.72rem" }}>
+                                    #{details.userId}
+                                  </span>
+                                  <span className="fw-bold text-dark lh-sm">
+                                    {details.userName}
+                                  </span>
+                                </div>
+                                <small className="text-secondary fw-semibold d-block mt-1">
+                                  {details.designation}
+                                </small>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 2. Office & Ministry */}
+                          <td className="align-middle">
+                            <div className="fw-semibold text-dark d-flex align-items-center gap-1 lh-sm">
+                              <Building size={13} className="text-muted flex-shrink-0" />
+                              <span>{details.officeName}</span>
+                            </div>
+                            <small className="text-muted d-flex align-items-center gap-1 mt-1">
+                              <Building2 size={12} className="flex-shrink-0" />
+                              <span>{details.minDiv}</span>
+                            </small>
+                          </td>
+
+                          {/* 3. Role */}
+                          <td className="align-middle">
+                            <span className="bg-primary px-2 py-1">
+                              {details.roleName}
+                            </span>
+                          </td>
+
+                          {/* 4. Expiration Date */}
+                          <td className="align-middle">
+                            <span className="bg-warning text-dark border border-warning px-2 py-1 d-inline-flex align-items-center gap-1">
+                              <Calendar size={12} />
+                              {details.expiresAt}
+                            </span>
+                          </td>
+
+                          {/* 5. Actions */}
+                          <td className="text-end align-middle">
+                            <div className="btn-group btn-group-sm">
+                              <button
+                                onClick={() => handleEdit(record)}
+                                className="btn btn-outline-primary"
+                                title="Reset / Update Password"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(record.id)}
+                                className="btn btn-outline-danger"
+                                title="Delete Record"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan="5" className="text-center py-5 text-muted">
+                        <AlertCircle size={32} className="mb-2" />
+                        <p className="mb-0">No passcode records found in database.</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* -------------------- View modal -------------------- */}
-      {viewItem && (
-        <div className="modal-overlay" onClick={() => setViewItem(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Password Record</h2>
-              <button className="modal-close" onClick={() => setViewItem(null)}>
-                <X size={18} />
-              </button>
-            </div>
+      {/* Printable / PDF Export View */}
+      <div className="pms-print-only">
+        <style>{`
+          @media screen {
+            .pms-print-only {
+              display: none !important;
+            }
+          }
+          @media print {
+            body * {
+              visibility: hidden !important;
+            }
+            .pms-print-only, .pms-print-only * {
+              visibility: visible !important;
+            }
+            .pms-print-only {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 100% !important;
+              display: block !important;
+              padding: 20px !important;
+              background: #fff !important;
+            }
+            .pms-print-table {
+              width: 100% !important;
+              border-collapse: collapse !important;
+              margin-top: 15px !important;
+            }
+            .pms-print-table th, .pms-print-table td {
+              border: 1px solid #000 !important;
+              padding: 8px 10px !important;
+              font-size: 12px !important;
+              vertical-align: top !important;
+            }
+            .pms-print-table th {
+              background-color: #f2f2f2 !important;
+              font-weight: bold !important;
+              -webkit-print-color-adjust: exact;
+            }
+          }
+        `}</style>
 
-            <div className="modal-body">
-              <div className="modal-profile-header">
-                <div
-                  className="profile-avatar"
-                  style={{
-                    width: "48px",
-                    height: "48px",
-                    borderRadius: "50%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    backgroundColor: "#e2e8f0"
-                  }}
-                >
-                  <Shield size={24} />
-                </div>
-                <div>
-                  <h3>{viewItem.fullName}</h3>
-                  <p className="sub-text" style={{ margin: 0 }}>
-                    user_id: #{viewItem.userId} — {viewItem.role}
-                  </p>
-                </div>
-              </div>
+        <h2 style={{ textAlign: "center", marginBottom: "4px" }}>Passcode Directory Report</h2>
+        <p style={{ textAlign: "center", color: "#666", marginBottom: "20px", fontSize: "12px" }}>
+          Date Generated: {new Date().toLocaleDateString()} | Total Records: {filteredRecords.length}
+        </p>
 
-              <div className="modal-grid">
-                <div className="modal-item">
-                  <label>
-                    <UserCheck size={12} /> Ministry / Division
-                  </label>
-                  <p>{viewItem.ministryDivision}</p>
-                </div>
-
-                <div className="modal-item">
-                  <label>Strength</label>
-                  <p>
-                    <span className={`strength-badge ${strengthClass(viewItem.strength)}`}>
-                      {viewItem.strength}
-                    </span>
-                  </p>
-                </div>
-
-                <div className="modal-item full-width">
-                  <label>
-                    <Lock size={12} /> Password
-                  </label>
-                  <div className="password-field-wrapper password-view-wrapper">
-                    <input
-                      type={viewPasswordVisible ? "text" : "password"}
-                      value={viewItem.password}
-                      readOnly
-                    />
-                    <button
-                      type="button"
-                      className="eye-toggle-btn"
-                      onClick={() => setViewPasswordVisible((prev) => !prev)}
-                      title={viewPasswordVisible ? "Hide password" : "Show password"}
-                    >
-                      {viewPasswordVisible ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="modal-item">
-                  <label>Last Updated</label>
-                  <p>{viewItem.updatedAt}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button className="button-secondary" onClick={() => setViewItem(null)}>
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* -------------------- Print view -------------------- */}
-      <div className="print-table-wrapper">
-        <h1 className="print-title">Password Records</h1>
-        <p className="print-subtitle">Date Generated: {new Date().toLocaleDateString()}</p>
-        <table className="print-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+        <table className="pms-print-table">
           <thead>
             <tr>
-              <th>User</th>
-              <th>user_id</th>
-              <th>Ministry / Division</th>
-              <th>Role</th>
-              <th>Strength</th>
-              <th>Last Updated</th>
+              <th style={{ width: "10%" }}>User ID</th>
+              <th style={{ width: "25%" }}>Name & Designation</th>
+              <th style={{ width: "25%" }}>Office & Ministry</th>
+              <th style={{ width: "20%" }}>Role</th>
+              <th style={{ width: "20%" }}>Expiration Date</th>
             </tr>
           </thead>
           <tbody>
-            {records.map((item) => (
-              <tr key={item.id}>
-                <td>{item.fullName}</td>
-                <td>#{item.userId}</td>
-                <td>{item.ministryDivision}</td>
-                <td>{item.role}</td>
-                <td>{item.strength}</td>
-                <td>{item.updatedAt}</td>
-              </tr>
-            ))}
+            {filteredRecords.map((item) => {
+              const details = resolveUserDetail(item);
+              return (
+                <tr key={item.id}>
+                  <td>#{details.userId}</td>
+                  <td>
+                    <strong>{details.userName}</strong>
+                    <br />
+                    <span>{details.designation}</span>
+                  </td>
+                  <td>
+                    {details.officeName}
+                    <br />
+                    <span>{details.minDiv}</span>
+                  </td>
+                  <td>{details.roleName}</td>
+                  <td>{details.expiresAt}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
