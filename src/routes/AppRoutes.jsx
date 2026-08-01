@@ -14,6 +14,7 @@ import PhysicalProgress from "../pages/Projects/PhysicalProgress";
 import Reports from "../pages/Reports";
 import Settings from "../pages/Settings";
 import Users from "../pages/AdminPannel/Users";
+import Passcode from "../pages/AdminPannel/Passcode";
 
 
 const AppRoutes = () => {
@@ -86,6 +87,11 @@ const AppRoutes = () => {
                 <Route 
                     path="/admin/users"
                     element={<Users />}
+                />
+
+                <Route 
+                    path="/admin/password"
+                    element={<Passcode />}
                 />
 
 

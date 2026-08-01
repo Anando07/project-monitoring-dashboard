@@ -86,7 +86,8 @@ const menus = [
     icon: <FaUserShield />,
     children: [
       { name: "Users", icon: <FaUsers />, path: "/admin/users" },
-      { name: "Role Management", icon: <FaUserShield />, path: "/admin/roles" }
+      { name: "Password", icon: <FaKey />, path: "/admin/password" },
+      { name: "Role", icon: <FaUserShield />, path: "/admin/roles" }
     ]
   },
   {
