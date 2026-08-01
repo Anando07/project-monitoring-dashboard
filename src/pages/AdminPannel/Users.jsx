@@ -1,5 +1,12 @@
-import React, { useState, useMemo } from "react";
-import "./Users.css";
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  getAllUsers,
+  createUserApi,
+  updateUserApi,
+  deleteUserApi,
+  getAllRoles,
+  getAllMinistries
+} from "../../services/UserService";
 import {
   UserPlus,
   Search,
@@ -19,93 +26,99 @@ import {
   Upload,
   RotateCcw,
   CheckCircle,
-  XCircle
+  XCircle,
+  Loader,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
-
-// Predefined Ministry / Division List
-const MINISTRIES_DIVISIONS = [
-  "Road Transport and Highways Division",
-  "Power Division",
-  "Local Government Division",
-  "Bridges Division",
-  "Information and Communication Technology Division",
-  "Ministry of Water Resources",
-  "Ministry of Housing and Public Works"
-];
-
-// Updated User Roles
-const USER_ROLES = [
-  "Administrator",
-  "Super Admin",
-  "Admin",
-  "Visitor",
-  "Project Director",
-  "Assistant Project Director",
-  "Project Officer",
-  "Project Engineer",
-  "Project Supervisor",
-  "Entry User",
-  "User Add Role",
-  "No Role",
-];
 
 const INITIAL_FORM_STATE = {
   id: null,
-  fullName: "",
+  name: "",
   designation: "",
   officeName: "",
-  role: "Admin",
-  ministryDivision: "",
+  roleId: "",
+  minDiv: "",
   email: "",
-  phone: "",
-  status: "Active",
+  number: "",
+  active: true,
   avatar: ""
 };
 
-const INITIAL_USERS = [
-  {
-    id: 1,
-    fullName: "A. S. M. Kabir",
-    designation: "Director General",
-    officeName: "Headquarters, Dhaka",
-    role: "Super Admin",
-    ministryDivision: "Road Transport and Highways Division",
-    email: "asm.kabir@rthd.gov.bd",
-    phone: "+880 1711-000000",
-    status: "Active",
-    avatar: ""
-  },
-  {
-    id: 2,
-    fullName: "Nusrat Jahan",
-    designation: "Deputy Director (Planning)",
-    officeName: "Planning & Development Wing",
-    role: "Admin",
-    ministryDivision: "Local Government Division",
-    email: "nusrat.j@lgd.gov.bd",
-    phone: "+880 1819-111222",
-    status: "Inactive",
-    avatar: ""
-  }
-];
+const USERS_PER_PAGE = 10;
 
 function Users() {
-  const [users, setUsers] = useState(INITIAL_USERS);
+  const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [ministries, setMinistries] = useState([]);
+  
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [errors, setErrors] = useState({});
   const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState(null);
 
-  // Search & Modal States
+  // Search, Modal & Pagination States
   const [searchTerm, setSearchTerm] = useState("");
   const [viewItem, setViewItem] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Fetch initial data from Database on load
+  useEffect(() => {
+    fetchInitialData();
+  }, []);
+
+  // Reset pagination to page 1 whenever search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  const fetchInitialData = async () => {
+    setLoading(true);
+    setApiError(null);
+    try {
+      const [usersRes, rolesRes, ministriesRes] = await Promise.all([
+        getAllUsers(),
+        getAllRoles(),
+        getAllMinistries()
+      ]);
+
+      setUsers(usersRes.data || []);
+      setRoles(rolesRes.data || []);
+      setMinistries(ministriesRes.data || []);
+
+      if (rolesRes.data && rolesRes.data.length > 0) {
+        setFormData((prev) => ({ ...prev, roleId: rolesRes.data[0].id }));
+      }
+      setLoading(false);
+    } catch (error) {
+      console.error("Failed to load initial data:", error);
+      setApiError("Unable to fetch user list or reference data from server.");
+      setLoading(false);
+    }
+  };
+
+  const fetchUsers = () => {
+    getAllUsers()
+      .then((response) => setUsers(response.data || []))
+      .catch((err) => console.error("Error refreshing users:", err));
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+
+    if (name === "active") {
+      setFormData((prev) => ({ ...prev, active: value === "true" }));
+    } else if (name === "roleId") {
+      setFormData((prev) => ({ ...prev, roleId: Number(value) }));
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
+    }
+
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }));
   };
 
-  // Image File Upload Handler (Optional Field)
+  // Image Upload Handler
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -126,28 +139,28 @@ function Users() {
     setFormData((prev) => ({ ...prev, avatar: "" }));
   };
 
-  // Reset Form Handler
   const handleReset = () => {
-    setFormData(INITIAL_FORM_STATE);
+    setFormData({
+      ...INITIAL_FORM_STATE,
+      roleId: roles.length > 0 ? roles[0].id : ""
+    });
     setErrors({});
     setIsEditing(false);
   };
 
-  // Strict Validation: All non-image fields are required
   const validateForm = () => {
     const newErrors = {};
-    if (!formData.fullName.trim()) newErrors.fullName = "Full name is required.";
+    if (!formData.name.trim()) newErrors.name = "Full name is required.";
     if (!formData.designation.trim()) newErrors.designation = "Designation is required.";
-    if (!formData.officeName.trim()) newErrors.officeName = "Office name / Wing is required.";
-    if (!formData.ministryDivision) newErrors.ministryDivision = "Select a Ministry or Division.";
-    if (!formData.role) newErrors.role = "Role Privilege is required.";
+    if (!formData.officeName.trim()) newErrors.officeName = "Office name is required.";
+    if (!formData.minDiv) newErrors.minDiv = "Select a Ministry or Division.";
+    if (!formData.roleId) newErrors.roleId = "Role Privilege is required.";
     if (!formData.email.trim()) {
       newErrors.email = "Email address is required.";
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = "Enter a valid email address.";
     }
-    if (!formData.phone.trim()) newErrors.phone = "Phone number is required.";
-    if (!formData.status) newErrors.status = "User Status is required.";
+    if (!formData.number.trim()) newErrors.number = "Phone number is required.";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -158,24 +171,41 @@ function Users() {
     if (!validateForm()) return;
 
     if (isEditing) {
-      setUsers((prev) =>
-        prev.map((item) => (item.id === formData.id ? { ...formData } : item))
-      );
-      setIsEditing(false);
+      updateUserApi(formData.id, formData)
+        .then(() => {
+          fetchUsers();
+          handleReset();
+        })
+        .catch((error) => {
+          console.error("Error updating user:", error);
+          alert("Failed to update user. Check backend server.");
+        });
     } else {
-      const newUser = {
-        ...formData,
-        id: Date.now()
-      };
-      setUsers((prev) => [newUser, ...prev]);
+      createUserApi(formData)
+        .then(() => {
+          fetchUsers();
+          handleReset();
+        })
+        .catch((error) => {
+          console.error("Error creating user:", error);
+          alert("Failed to save user. Check backend server.");
+        });
     }
-
-    setFormData(INITIAL_FORM_STATE);
-    setErrors({});
   };
 
-  const handleEdit = (item) => {
-    setFormData({ ...item });
+  const handleEdit = (user) => {
+    setFormData({
+      id: user.id,
+      name: user.name || "",
+      designation: user.designation || "",
+      officeName: user.officeName || "",
+      roleId: user.roleId || (roles.length > 0 ? roles[0].id : ""),
+      minDiv: user.minDiv || "",
+      email: user.email || "",
+      number: user.number || "",
+      active: user.active ?? true,
+      avatar: user.avatar || ""
+    });
     setIsEditing(true);
     setErrors({});
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -183,273 +213,295 @@ function Users() {
 
   const handleDelete = (id) => {
     if (window.confirm("Are you sure you want to remove this user account?")) {
-      setUsers((prev) => prev.filter((item) => item.id !== id));
-      if (formData.id === id) {
-        handleReset();
-      }
+      deleteUserApi(id)
+        .then(() => {
+          fetchUsers();
+          if (formData.id === id) handleReset();
+        })
+        .catch((error) => {
+          console.error("Error deleting user:", error);
+          alert("Could not delete user.");
+        });
     }
+  };
+
+  // Helper to resolve role name
+  const getRoleName = (roleId, fallbackRoleName) => {
+    if (fallbackRoleName) return fallbackRoleName;
+    const found = roles.find((r) => r.id === roleId);
+    return found ? found.roleName : "User";
+  };
+
+  // Helper to determine status boolean
+  const isUserActive = (status) => {
+    if (typeof status === "boolean") return status;
+    if (typeof status === "string") return status.toLowerCase() === "active" || status === "true";
+    return true;
   };
 
   // Search Filtering
   const filteredUsers = useMemo(() => {
     return users.filter((item) => {
       const query = searchTerm.toLowerCase();
+      const roleName = getRoleName(item.roleId, item.roleName).toLowerCase();
+      const statusString = isUserActive(item.active !== undefined ? item.active : item.status) ? "active" : "inactive";
+
       return (
-        item.fullName.toLowerCase().includes(query) ||
-        item.designation.toLowerCase().includes(query) ||
+        (item.name && item.name.toLowerCase().includes(query)) ||
+        (item.designation && item.designation.toLowerCase().includes(query)) ||
         (item.officeName && item.officeName.toLowerCase().includes(query)) ||
-        item.ministryDivision.toLowerCase().includes(query) ||
-        item.role.toLowerCase().includes(query) ||
-        item.status.toLowerCase().includes(query)
+        (item.minDiv && item.minDiv.toLowerCase().includes(query)) ||
+        roleName.includes(query) ||
+        statusString.includes(query) ||
+        (item.email && item.email.toLowerCase().includes(query)) ||
+        (item.number && item.number.toLowerCase().includes(query))
       );
     });
-  }, [users, searchTerm]);
+  }, [users, searchTerm, roles]);
+
+  // Pagination calculation
+  const totalPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE) || 1;
+  const currentUsers = useMemo(() => {
+    const startIndex = (currentPage - 1) * USERS_PER_PAGE;
+    return filteredUsers.slice(startIndex, startIndex + USERS_PER_PAGE);
+  }, [filteredUsers, currentPage]);
 
   return (
-    <div className="dashboard-page">
+    <div className="container-fluid py-4 bg-light">
       {/* User Input Form Card */}
-      <div className="dashboard-card no-print">
-        <div className="dashboard-card-header">
-          <h3>{isEditing ? "Edit User Record" : "Add Director / Officer User"}</h3>
-          <UserCheck className="card-action-icon" size={20} />
+      <div className="card shadow-sm mb-4 border-0">
+        <div className="card-header bg-white d-flex justify-content-between align-items-center py-3 border-bottom">
+          <h5 className="mb-0 text-primary fw-bold">
+            {isEditing ? "Edit User Record" : "Add Director / Officer User"}
+          </h5>
+          <UserCheck className="text-primary" size={22} />
         </div>
 
-        <form onSubmit={handleSubmit} className="project-form">
-          {/* Row 1: Full Name, Designation, Office Name */}
-          <div className="form-grid form-grid-3">
-            {/* Full Name */}
-            <div className="form-group">
-              <label>
-                Full Name <span className="req-star">*</span>
-              </label>
-              <input
-                type="text"
-                name="fullName"
-                placeholder="e.g. A. S. M. Kabir"
-                value={formData.fullName}
-                onChange={handleInputChange}
-                className={errors.fullName ? "input-error" : ""}
-              />
-              {errors.fullName && <span className="field-error">{errors.fullName}</span>}
+        <div className="card-body p-4">
+          <form onSubmit={handleSubmit}>
+            {/* Row 1: Name, Designation, Office */}
+            <div className="row g-3 mb-3">
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">
+                  Full Name <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  placeholder="e.g. Anando Kumar Biswas"
+                  value={formData.name}
+                  onChange={handleInputChange}
+                  className={`form-control ${errors.name ? "is-invalid" : ""}`}
+                />
+                {errors.name && <div className="invalid-feedback">{errors.name}</div>}
+              </div>
+
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">
+                  Designation <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="designation"
+                  placeholder="e.g. Assistant Programmer"
+                  value={formData.designation}
+                  onChange={handleInputChange}
+                  className={`form-control ${errors.designation ? "is-invalid" : ""}`}
+                />
+                {errors.designation && <div className="invalid-feedback">{errors.designation}</div>}
+              </div>
+
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">
+                  Office Name / Department <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="officeName"
+                  placeholder="e.g. IRD HQ"
+                  value={formData.officeName}
+                  onChange={handleInputChange}
+                  className={`form-control ${errors.officeName ? "is-invalid" : ""}`}
+                />
+                {errors.officeName && <div className="invalid-feedback">{errors.officeName}</div>}
+              </div>
             </div>
 
-            {/* Designation */}
-            <div className="form-group">
-              <label>
-                Designation <span className="req-star">*</span>
-              </label>
-              <input
-                type="text"
-                name="designation"
-                placeholder="e.g. Director General / Additional Secretary"
-                value={formData.designation}
-                onChange={handleInputChange}
-                className={errors.designation ? "input-error" : ""}
-              />
-              {errors.designation && <span className="field-error">{errors.designation}</span>}
-            </div>
-
-            {/* Office Name */}
-            <div className="form-group">
-              <label>
-                Office Name / Department / Wing <span className="req-star">*</span>
-              </label>
-              <input
-                type="text"
-                name="officeName"
-                placeholder="e.g. HQ Secretariat / Planning Division"
-                value={formData.officeName}
-                onChange={handleInputChange}
-                className={errors.officeName ? "input-error" : ""}
-              />
-              {errors.officeName && <span className="field-error">{errors.officeName}</span>}
-            </div>
-          </div>
-
-          {/* Row 2: Ministry, Email, Phone Number */}
-          <div className="form-grid form-grid-3">
-            {/* Ministry / Division */}
-            <div className="form-group">
-              <label>
-                Ministry / Division <span className="req-star">*</span>
-              </label>
-              <select
-                name="ministryDivision"
-                value={formData.ministryDivision}
-                onChange={handleInputChange}
-                className={errors.ministryDivision ? "input-error" : ""}
-              >
-                <option value="">-- Select Ministry / Division --</option>
-                {MINISTRIES_DIVISIONS.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-              {errors.ministryDivision && (
-                <span className="field-error">{errors.ministryDivision}</span>
-              )}
-            </div>
-
-            {/* Email */}
-            <div className="form-group">
-              <label>
-                Email Address <span className="req-star">*</span>
-              </label>
-              <input
-                type="email"
-                name="email"
-                placeholder="official@domain.gov.bd"
-                value={formData.email}
-                onChange={handleInputChange}
-                className={errors.email ? "input-error" : ""}
-              />
-              {errors.email && <span className="field-error">{errors.email}</span>}
-            </div>
-
-            {/* Phone Number */}
-            <div className="form-group">
-              <label>
-                Phone Number <span className="req-star">*</span>
-              </label>
-              <input
-                type="text"
-                name="phone"
-                placeholder="+880 1700-000000"
-                value={formData.phone}
-                onChange={handleInputChange}
-                className={errors.phone ? "input-error" : ""}
-              />
-              {errors.phone && <span className="field-error">{errors.phone}</span>}
-            </div>
-          </div>
-
-          {/* Row 3: Role Privilege, Status (Before Image Field), Profile Photo Upload */}
-          <div className="form-grid form-grid-3" style={{ marginTop: "0.5rem", alignItems: "flex-start" }}>
-            {/* Role Privilege */}
-            <div className="form-group">
-              <label>
-                Role Privilege <span className="req-star">*</span>
-              </label>
-              <select
-                name="role"
-                value={formData.role}
-                onChange={handleInputChange}
-                className={errors.role ? "input-error" : ""}
-              >
-                {USER_ROLES.map((role) => (
-                  <option key={role} value={role}>
-                    {role}
-                  </option>
-                ))}
-              </select>
-              {errors.role && <span className="field-error">{errors.role}</span>}
-            </div>
-
-            {/* Status Field (Positioned directly before Profile Photo) */}
-            <div className="form-group">
-              <label>
-                User Status <span className="req-star">*</span>
-              </label>
-              <select
-                name="status"
-                value={formData.status}
-                onChange={handleInputChange}
-                className={errors.status ? "input-error" : ""}
-              >
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-              {errors.status && <span className="field-error">{errors.status}</span>}
-            </div>
-
-            {/* Profile Photo (Optional Field) */}
-            <div className="form-group">
-              <label>
-                Profile Photo <span className="sub-text">(Optional, Max 2MB)</span>
-              </label>
-              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-                <div
-                  style={{
-                    width: "44px",
-                    height: "44px",
-                    borderRadius: "50%",
-                    backgroundColor: "#f1f5f9",
-                    border: "1px dashed #cbd5e1",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    overflow: "hidden",
-                    flexShrink: 0
-                  }}
+            {/* Row 2: Ministry (DB), Email, Phone */}
+            <div className="row g-3 mb-3">
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">
+                  Ministry / Division <span className="text-danger">*</span>
+                </label>
+                <select
+                  name="minDiv"
+                  value={formData.minDiv}
+                  onChange={handleInputChange}
+                  className={`form-select ${errors.minDiv ? "is-invalid" : ""}`}
                 >
-                  {formData.avatar ? (
-                    <img
-                      src={formData.avatar}
-                      alt="Preview"
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                    />
-                  ) : (
-                    <ImageIcon size={18} style={{ color: "#94a3b8" }} />
-                  )}
-                </div>
+                  <option value="">-- Select Ministry / Division --</option>
+                  {ministries.map((m) => (
+                    <option key={m.id || m.name} value={m.name}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+                {errors.minDiv && <div className="invalid-feedback">{errors.minDiv}</div>}
+              </div>
 
-                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                  <label className="button-secondary" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.4rem 0.8rem", fontSize: "0.85rem" }}>
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">
+                  Email Address <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="abku07@gmail.com"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  className={`form-control ${errors.email ? "is-invalid" : ""}`}
+                />
+                {errors.email && <div className="invalid-feedback">{errors.email}</div>}
+              </div>
+
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">
+                  Phone Number <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="number"
+                  placeholder="01790012288"
+                  value={formData.number}
+                  onChange={handleInputChange}
+                  className={`form-control ${errors.number ? "is-invalid" : ""}`}
+                />
+                {errors.number && <div className="invalid-feedback">{errors.number}</div>}
+              </div>
+            </div>
+
+            {/* Row 3: Role (DB), Status, Photo */}
+            <div className="row g-3 mb-3 align-items-start">
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">
+                  Role Privilege <span className="text-danger">*</span>
+                </label>
+                <select
+                  name="roleId"
+                  value={formData.roleId}
+                  onChange={handleInputChange}
+                  className={`form-select ${errors.roleId ? "is-invalid" : ""}`}
+                >
+                  <option value="">-- Select Role --</option>
+                  {roles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.roleName}
+                    </option>
+                  ))}
+                </select>
+                {errors.roleId && <div className="invalid-feedback">{errors.roleId}</div>}
+              </div>
+
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">
+                  User Status <span className="text-danger">*</span>
+                </label>
+                <select
+                  name="active"
+                  value={formData.active.toString()}
+                  onChange={handleInputChange}
+                  className="form-select"
+                >
+                  <option value="true">Active</option>
+                  <option value="false">Inactive</option>
+                </select>
+              </div>
+
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">
+                  Profile Photo <span className="text-muted small">(Optional, Max 2MB)</span>
+                </label>
+                <div className="d-flex align-items-center gap-2">
+                  <div
+                    className="border rounded-circle bg-light d-flex align-items-center justify-content-center overflow-hidden flex-shrink-0"
+                    style={{ width: "44px", height: "44px" }}
+                  >
+                    {formData.avatar ? (
+                      <img
+                        src={formData.avatar}
+                        alt="Preview"
+                        className="w-100 h-100 object-fit-cover"
+                      />
+                    ) : (
+                      <ImageIcon size={18} className="text-secondary" />
+                    )}
+                  </div>
+                  <label className="btn btn-outline-secondary btn-sm mb-0 d-inline-flex align-items-center gap-1">
                     <Upload size={14} /> Upload Image
                     <input
                       type="file"
                       accept="image/*"
                       onChange={handleImageChange}
-                      style={{ display: "none" }}
+                      className="d-none"
                     />
                   </label>
                   {formData.avatar && (
                     <button
                       type="button"
                       onClick={handleRemoveImage}
-                      className="button-secondary"
-                      style={{ padding: "0.4rem 0.8rem", fontSize: "0.85rem", color: "#ef4444" }}
+                      className="btn btn-outline-danger btn-sm"
                     >
                       Remove
                     </button>
                   )}
                 </div>
+                {errors.avatar && <div className="text-danger small mt-1">{errors.avatar}</div>}
               </div>
-              {errors.avatar && <span className="field-error">{errors.avatar}</span>}
             </div>
-          </div>
 
-          {/* Form Actions with Reset Button */}
-          <div className="form-actions">
-            {isEditing && <span className="editing-badge">Editing User #{formData.id}</span>}
+            {/* Form Actions */}
+            <div className="d-flex justify-content-end align-items-center gap-2 pt-3 border-top mt-3">
+              {isEditing && (
+                <span className="badge bg-warning text-dark me-auto fs-6">
+                  Editing Record
+                </span>
+              )}
 
-            <button
-              type="button"
-              onClick={handleReset}
-              className="button-secondary"
-              title="Reset Form"
-            >
-              <RotateCcw size={15} /> Reset
-            </button>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="btn btn-outline-secondary d-inline-flex align-items-center gap-1"
+              >
+                <RotateCcw size={15} /> Reset
+              </button>
 
-            <button type="submit" className="button-primary">
-              <UserPlus size={16} /> {isEditing ? "Update User" : "Add User Record"}
-            </button>
-          </div>
-        </form>
+              <button
+                type="submit"
+                className="btn btn-primary d-inline-flex align-items-center gap-1 px-3"
+              >
+                <UserPlus size={16} /> {isEditing ? "Update User" : "Add User Record"}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
 
       {/* Directory Table Card */}
-      <div className="dashboard-card no-print">
-        <div className="dashboard-card-header">
-          <h3>Director / Officer Directory</h3>
-          <div className="header-actions">
-            <div className="search-box">
-              <Search size={14} className="search-icon" />
+      <div className="card shadow-sm border-0">
+        <div className="card-header bg-white d-flex flex-wrap justify-content-between align-items-center py-3 gap-2 border-bottom">
+          <div>
+            <h5 className="mb-0 fw-bold text-dark">Director / Officer Directory</h5>
+            <small className="text-muted">Total Records: {filteredUsers.length}</small>
+          </div>
+          <div className="d-flex align-items-center gap-2">
+            <div className="input-group input-group-sm" style={{ width: "260px" }}>
+              <span className="input-group-text bg-light border-end-0">
+                <Search size={14} />
+              </span>
               <input
                 type="text"
-                placeholder="Search name, status, role..."
+                className="form-control bg-light border-start-0"
+                placeholder="Search name, designation, status..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -457,269 +509,383 @@ function Users() {
 
             <button
               onClick={() => window.print()}
-              className="button-secondary print-btn"
-              title="Print User List"
+              className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"
             >
-              <Printer size={14} /> Print
+              <Printer size={14} /> Print List
             </button>
           </div>
         </div>
 
-        <div className="table-overflow">
-          <table className="projects-table">
-            <thead>
-              <tr>
-                <th>Officer Details</th>
-                <th>Designation & Office</th>
-                <th>Ministry & Role</th>
-                <th>Status</th>
-                <th>Contact Information</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredUsers.length > 0 ? (
-                filteredUsers.map((user) => (
-                  <tr key={user.id}>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                        <div
-                          style={{
-                            width: "38px",
-                            height: "38px",
-                            borderRadius: "50%",
-                            backgroundColor: "#e2e8f0",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            overflow: "hidden",
-                            flexShrink: 0
-                          }}
-                        >
-                          {user.avatar ? (
-                            <img
-                              src={user.avatar}
-                              alt={user.fullName}
-                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                            />
-                          ) : (
-                            <Shield size={18} style={{ color: "#64748b" }} />
-                          )}
-                        </div>
-                        <div>
-                          <div className="project-name-tag">{user.fullName}</div>
-                          <span className="sub-text">ID: #{user.id}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 500 }}>{user.designation}</div>
-                      {user.officeName && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginTop: "0.2rem" }} className="sub-text">
-                          <Building size={12} />
-                          <span>{user.officeName}</span>
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                        <Building2 size={14} className="sub-text" />
-                        <span>{user.ministryDivision}</span>
-                      </div>
-                      <span className="duty-pill duty-pill-blue" style={{ marginTop: "0.25rem", display: "inline-block" }}>{user.role}</span>
-                    </td>
-                    <td>
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "0.3rem",
-                          padding: "0.2rem 0.55rem",
-                          borderRadius: "9999px",
-                          fontSize: "0.75rem",
-                          fontWeight: 500,
-                          backgroundColor: user.status === "Active" ? "#dcfce7" : "#fef2f2",
-                          color: user.status === "Active" ? "#166534" : "#991b1b"
-                        }}
-                      >
-                        {user.status === "Active" ? <CheckCircle size={12} /> : <XCircle size={12} />}
-                        {user.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="sub-text">{user.email}</div>
-                      <div className="sub-text">{user.phone}</div>
-                    </td>
-                    <td>
-                      <div className="table-action-cell" style={{ justifyContent: "flex-end" }}>
-                        <button
-                          onClick={() => setViewItem(user)}
-                          className="action-button"
-                          title="View Profile"
-                        >
-                          <Eye size={15} />
-                        </button>
-                        <button
-                          onClick={() => handleEdit(user)}
-                          className="action-button action-button-edit"
-                          title="Edit User"
-                        >
-                          <Edit2 size={15} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(user.id)}
-                          className="action-button action-button-danger"
-                          title="Delete User"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </td>
+        <div className="card-body p-0">
+          <div className="table-responsive">
+            {loading ? (
+              <div className="text-center py-5">
+                <Loader size={28} className="spinner-border text-primary border-0" />
+                <p className="mt-2 text-muted">Fetching user data from database...</p>
+              </div>
+            ) : apiError ? (
+              <div className="text-center py-5 text-danger">
+                <AlertCircle size={32} />
+                <p className="mt-2 fw-semibold">{apiError}</p>
+              </div>
+            ) : (
+              <table className="table table-hover align-middle mb-0">
+                <thead className="table-dark">
+                  <tr>
+                    <th style={{ width: "26%" }}>Name & Designation</th>
+                    <th style={{ width: "25%" }}>Office & Ministry</th>
+                    <th style={{ width: "16%" }}>Role</th>
+                    <th style={{ width: "12%" }}>Status</th>
+                    <th style={{ width: "13%" }}>Contact Info</th>
+                    <th style={{ width: "8%" }} className="text-end">Actions</th>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="6">
-                    <div className="empty-state">
-                      <AlertCircle size={32} />
-                      <p>No user records found matching your search parameters.</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {currentUsers.length > 0 ? (
+                    currentUsers.map((user) => {
+                      const activeStatus = isUserActive(user.active !== undefined ? user.active : user.status);
+                      return (
+                        <tr key={user.id} style={{ verticalAlign: "middle" }}>
+                          {/* 1. Name & Designation */}
+                          <td className="align-middle">
+                            <div className="d-flex align-items-center gap-2 py-1">
+                              <div
+                                className="border rounded-circle bg-light d-flex align-items-center justify-content-center overflow-hidden flex-shrink-0"
+                                style={{ width: "40px", height: "40px" }}
+                              >
+                                {user.avatar ? (
+                                  <img
+                                    src={user.avatar}
+                                    alt={user.name}
+                                    className="w-100 h-100 object-fit-cover"
+                                  />
+                                ) : (
+                                  <Shield size={18} className="text-secondary" />
+                                )}
+                              </div>
+                              <div>
+                                <div className="fw-bold text-dark lh-sm">{user.name}</div>
+                                <small className="text-secondary fw-semibold d-block mt-1">{user.designation}</small>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 2. Office & Ministry */}
+                          <td className="align-middle">
+                            <div className="fw-semibold text-dark d-flex align-items-center gap-1 lh-sm">
+                              <Building size={13} className="text-muted flex-shrink-0" />
+                              <span>{user.officeName || "N/A"}</span>
+                            </div>
+                            <small className="text-muted d-flex align-items-center gap-1 mt-1">
+                              <Building2 size={12} className="flex-shrink-0" />
+                              <span>{user.minDiv}</span>
+                            </small>
+                          </td>
+
+                          {/* 3. Role */}
+                          <td className="align-middle">
+                            <span className=" bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                              {getRoleName(user.roleId, user.roleName)}
+                            </span>
+                          </td>
+
+                          {/* 4. Status */}
+                          <td className="align-middle">
+                            <span
+                              className={` rounded-pill d-inline-flex align-items-center gap-1 px-2 py-1 ${
+                                activeStatus
+                                  ? "bg-success-subtle text-success border border-success-subtle"
+                                  : "bg-danger-subtle text-danger border border-danger-subtle"
+                              }`}
+                              style={{ fontSize: "0.78rem" }}
+                            >
+                              {activeStatus ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                              <span>{activeStatus ? "Active" : "Inactive"}</span>
+                            </span>
+                          </td>
+
+                          {/* 5. Contact Info */}
+                          <td className="align-middle">
+                            <small className="d-block text-dark font-monospace lh-sm">{user.email}</small>
+                            <small className="d-block text-muted mt-1">{user.number}</small>
+                          </td>
+
+                          {/* 6. Actions */}
+                          <td className="text-end align-middle">
+                            <div className="btn-group btn-group-sm">
+                              <button
+                                onClick={() => setViewItem(user)}
+                                className="btn btn-outline-secondary"
+                                title="View Profile"
+                              >
+                                <Eye size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleEdit(user)}
+                                className="btn btn-outline-primary"
+                                title="Edit User"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(user.id)}
+                                className="btn btn-outline-danger"
+                                title="Delete User"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan="6" className="text-center py-5 text-muted">
+                        <AlertCircle size={32} className="mb-2" />
+                        <p className="mb-0">No user records found matching your search parameters.</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
+
+        {/* 10 Items per Page Pagination Footer */}
+        {!loading && !apiError && filteredUsers.length > 0 && (
+          <div className="card-footer bg-white d-flex flex-wrap justify-content-between align-items-center py-3 border-top">
+            <small className="text-muted">
+              Showing {Math.min((currentPage - 1) * USERS_PER_PAGE + 1, filteredUsers.length)} to{" "}
+              {Math.min(currentPage * USERS_PER_PAGE, filteredUsers.length)} of {filteredUsers.length} entries
+            </small>
+
+            <ul className="pagination pagination-sm mb-0">
+              <li className={`page-item ${currentPage === 1 ? "disabled" : ""}`}>
+                <button
+                  className="page-item-link btn btn-sm btn-outline-secondary me-1"
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft size={14} /> Prev
+                </button>
+              </li>
+
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                <li key={page} className="page-item me-1">
+                  <button
+                    className={`btn btn-sm ${
+                      currentPage === page ? "btn-primary" : "btn-outline-secondary"
+                    }`}
+                    onClick={() => setCurrentPage(page)}
+                  >
+                    {page}
+                  </button>
+                </li>
+              ))}
+
+              <li className={`page-item ${currentPage === totalPages ? "disabled" : ""}`}>
+                <button
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next <ChevronRight size={14} />
+                </button>
+              </li>
+            </ul>
+          </div>
+        )}
       </div>
 
       {/* Profile Detail View Modal */}
       {viewItem && (
-        <div className="modal-overlay" onClick={() => setViewItem(null)}>
-          <div className="modal-content modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Officer Profile Details</h2>
-              <button className="modal-close" onClick={() => setViewItem(null)}>
-                <X size={18} />
-              </button>
-            </div>
+        <div
+          className="modal d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          onClick={() => setViewItem(null)}
+        >
+          <div className="modal-dialog modal-dialog-centered modal-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-content border-0 shadow">
+              <div className="modal-header bg-light">
+                <h5 className="modal-title fw-bold text-dark">Officer Profile Details</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setViewItem(null)}
+                ></button>
+              </div>
 
-            <div className="modal-body">
-              <div className="modal-profile-header">
-                <div
-                  className="profile-avatar"
-                  style={{
-                    width: "56px",
-                    height: "56px",
-                    borderRadius: "50%",
-                    overflow: "hidden",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    backgroundColor: "#e2e8f0"
-                  }}
+              <div className="modal-body p-4">
+                <div className="d-flex align-items-center gap-3 mb-4 pb-3 border-bottom">
+                  <div
+                    className="border rounded-circle bg-light d-flex align-items-center justify-content-center overflow-hidden flex-shrink-0"
+                    style={{ width: "56px", height: "56px" }}
+                  >
+                    {viewItem.avatar ? (
+                      <img
+                        src={viewItem.avatar}
+                        alt={viewItem.name}
+                        className="w-100 h-100 object-fit-cover"
+                      />
+                    ) : (
+                      <Shield size={28} className="text-secondary" />
+                    )}
+                  </div>
+                  <div>
+                    <h5 className="mb-0 fw-bold">{viewItem.name}</h5>
+                    <p className="text-muted mb-0">{viewItem.designation}</p>
+                  </div>
+                </div>
+
+                <div className="row g-3">
+                  <div className="col-md-6">
+                    <label className="text-muted small d-block mb-1">
+                      <Building size={12} className="me-1" /> Office / Department
+                    </label>
+                    <p className="fw-semibold text-dark mb-0">{viewItem.officeName || "N/A"}</p>
+                  </div>
+
+                  <div className="col-md-6">
+                    <label className="text-muted small d-block mb-1">
+                      <Building2 size={12} className="me-1" /> Ministry / Division
+                    </label>
+                    <p className="fw-semibold text-dark mb-0">{viewItem.minDiv}</p>
+                  </div>
+
+                  <div className="col-md-6">
+                    <label className="text-muted small d-block mb-1">
+                      <Shield size={12} className="me-1" /> System Role
+                    </label>
+                    <p className="fw-semibold text-dark mb-0">{getRoleName(viewItem.roleId, viewItem.roleName)}</p>
+                  </div>
+
+                  <div className="col-md-6">
+                    <label className="text-muted small d-block mb-1">
+                      <UserCheck size={12} className="me-1" /> Status
+                    </label>
+                    <p className="fw-semibold text-dark mb-0">
+                      {isUserActive(viewItem.active !== undefined ? viewItem.active : viewItem.status)
+                        ? "Active"
+                        : "Inactive"}
+                    </p>
+                  </div>
+
+                  <div className="col-md-6">
+                    <label className="text-muted small d-block mb-1">
+                      <Mail size={12} className="me-1" /> Email Address
+                    </label>
+                    <p className="fw-semibold text-dark mb-0">{viewItem.email}</p>
+                  </div>
+
+                  <div className="col-md-6">
+                    <label className="text-muted small d-block mb-1">
+                      <Phone size={12} className="me-1" /> Phone Number
+                    </label>
+                    <p className="fw-semibold text-dark mb-0">{viewItem.number}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer bg-light">
+                <button
+                  type="button"
+                  className="btn btn-secondary px-4"
+                  onClick={() => setViewItem(null)}
                 >
-                  {viewItem.avatar ? (
-                    <img
-                      src={viewItem.avatar}
-                      alt={viewItem.fullName}
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                    />
-                  ) : (
-                    <Shield size={28} />
-                  )}
-                </div>
-                <div>
-                  <h3>{viewItem.fullName}</h3>
-                  <p className="sub-text" style={{ margin: 0 }}>
-                    {viewItem.designation}
-                  </p>
-                </div>
+                  Close
+                </button>
               </div>
-
-              <div className="modal-grid">
-                <div className="modal-item">
-                  <label>
-                    <Building size={12} /> Office / Department
-                  </label>
-                  <p>{viewItem.officeName || "N/A"}</p>
-                </div>
-
-                <div className="modal-item">
-                  <label>
-                    <Building2 size={12} /> Ministry / Division
-                  </label>
-                  <p>{viewItem.ministryDivision}</p>
-                </div>
-
-                <div className="modal-item">
-                  <label>
-                    <Shield size={12} /> System Role
-                  </label>
-                  <p>{viewItem.role}</p>
-                </div>
-
-                <div className="modal-item">
-                  <label>
-                    <UserCheck size={12} /> Status
-                  </label>
-                  <p>{viewItem.status}</p>
-                </div>
-
-                <div className="modal-item">
-                  <label>
-                    <Mail size={12} /> Email Address
-                  </label>
-                  <p style={{ fontSize: "0.875rem" }}>{viewItem.email}</p>
-                </div>
-
-                <div className="modal-item">
-                  <label>
-                    <Phone size={12} /> Phone Number
-                  </label>
-                  <p style={{ fontSize: "0.875rem" }}>{viewItem.phone}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button className="button-secondary" onClick={() => setViewItem(null)}>
-                Close
-              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Print View Layout */}
-      <div className="print-table-wrapper">
-        <h1 className="print-title">Director / Officer Directory</h1>
-        <p className="print-subtitle">Date Generated: {new Date().toLocaleDateString()}</p>
-        <table className="print-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+      {/* Dedicated Printable / PDF Export Section */}
+      <div className="pms-print-only">
+        <style>{`
+          @media screen {
+            .pms-print-only {
+              display: none !important;
+            }
+          }
+          @media print {
+            body * {
+              visibility: hidden !important;
+            }
+            .pms-print-only, .pms-print-only * {
+              visibility: visible !important;
+            }
+            .pms-print-only {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 100% !important;
+              display: block !important;
+              padding: 20px !important;
+              background: #fff !important;
+            }
+            .pms-print-table {
+              width: 100% !important;
+              border-collapse: collapse !important;
+              margin-top: 15px !important;
+            }
+            .pms-print-table th, .pms-print-table td {
+              border: 1px solid #000 !important;
+              padding: 8px 10px !important;
+              font-size: 12px !important;
+              vertical-align: top !important;
+            }
+            .pms-print-table th {
+              background-color: #f2f2f2 !important;
+              font-weight: bold !important;
+              -webkit-print-color-adjust: exact;
+            }
+          }
+        `}</style>
+
+        <h2 style={{ textAlign: "center", marginBottom: "4px" }}>Director / Officer Directory</h2>
+        <p style={{ textAlign: "center", color: "#666", marginBottom: "20px", fontSize: "12px" }}>
+          Date Generated: {new Date().toLocaleDateString()} | Total Users: {filteredUsers.length}
+        </p>
+
+        <table className="pms-print-table">
           <thead>
             <tr>
-              <th>Full Name</th>
-              <th>Designation</th>
-              <th>Office Name</th>
-              <th>Ministry / Division</th>
-              <th>Role</th>
-              <th>Status</th>
-              <th>Contact Details</th>
+              <th style={{ width: "25%" }}>Name & Designation</th>
+              <th style={{ width: "25%" }}>Office & Ministry</th>
+              <th style={{ width: "15%" }}>Role</th>
+              <th style={{ width: "15%" }}>Status</th>
+              <th style={{ width: "20%" }}>Contact Info</th>
             </tr>
           </thead>
           <tbody>
-            {users.map((item) => (
-              <tr key={item.id}>
-                <td>{item.fullName}</td>
-                <td>{item.designation}</td>
-                <td>{item.officeName || "-"}</td>
-                <td>{item.ministryDivision}</td>
-                <td>{item.role}</td>
-                <td>{item.status}</td>
-                <td>
-                  {item.email} | {item.phone}
-                </td>
-              </tr>
-            ))}
+            {filteredUsers.map((item) => {
+              const activeStatus = isUserActive(item.active !== undefined ? item.active : item.status);
+              return (
+                <tr key={item.id}>
+                  <td>
+                    <strong>{item.name}</strong>
+                    <br />
+                    <span>{item.designation}</span>
+                  </td>
+                  <td>
+                    {item.officeName || "N/A"}
+                    <br />
+                    <span>{item.minDiv}</span>
+                  </td>
+                  <td>{getRoleName(item.roleId, item.roleName)}</td>
+                  <td>{activeStatus ? "Active" : "Inactive"}</td>
+                  <td>
+                    {item.email}
+                    <br />
+                    {item.number}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

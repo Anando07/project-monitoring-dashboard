@@ -16,6 +16,7 @@
     "@mui/icons-material": "^9.2.0",
     "@mui/material": "^9.2.0",
     "axios": "^1.19.0",
+    "bootstrap": "^5.3.8",
     "dayjs": "^1.11.21",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.28.0",
