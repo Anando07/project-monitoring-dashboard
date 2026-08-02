@@ -45,7 +45,7 @@ const menus = [
     name: "Projects",
     icon: <FaFolder />,
     children: [
-      { name: "Create Project", icon: <FaPlusCircle />, path: "/projects/create" },
+      { name: "Project", icon: <FaPlusCircle />, path: "/projects/create" },
       { name: "Finance", icon: <FaMoneyBillWave />, path: "/projects/finance" },
       { name: "Project Director", icon: <FaUserTie />, path: "/projects/director" },
       { name: "Financial Progress", icon: <FaMoneyBillWave />, path: "/projects/financial/progress" },

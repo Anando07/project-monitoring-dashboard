@@ -1,22 +1,33 @@
 import axios from "axios";
 
-const REST_PROJECT_API_BASE_URL = "http://localhost:8080/api/projects";
+// Base API Endpoint
+const API_BASE_URL = "http://localhost:8080/api";
 
-// Fetch all projects
+// Endpoint URLs
+const REST_PROJECT_API_BASE_URL = `${API_BASE_URL}/projects`;
+const REST_MINISTRY_API_BASE_URL = `${API_BASE_URL}/ministries`;
+const REST_DIRECTORATE_API_BASE_URL = `${API_BASE_URL}/directorates`;
+
+// ==========================================
+// Projects API Calls
+// ==========================================
 export const getAllProjects = () => axios.get(REST_PROJECT_API_BASE_URL);
 
-// Fetch projects belonging to a specific ministry
-export const getProjectsByMinistryApi = (ministryId) =>
-  axios.get(`${REST_PROJECT_API_BASE_URL}/ministry/${ministryId}`);
+export const getProjectById = (id) => axios.get(`${REST_PROJECT_API_BASE_URL}/${id}`);
 
-// Create a new project under a ministry
-export const createProjectApi = (projectData) =>
-  axios.post(REST_PROJECT_API_BASE_URL, projectData);
+export const createProject = (project) => axios.post(REST_PROJECT_API_BASE_URL, project);
 
-// Update an existing project record by ID
-export const updateProjectApi = (id, projectData) =>
-  axios.put(`${REST_PROJECT_API_BASE_URL}/${id}`, projectData);
+export const updateProject = (id, project) => axios.put(`${REST_PROJECT_API_BASE_URL}/${id}`, project);
 
-// Delete a project record
-export const deleteProjectApi = (id) =>
-  axios.delete(`${REST_PROJECT_API_BASE_URL}/${id}`);
+export const deleteProject = (id) => axios.delete(`${REST_PROJECT_API_BASE_URL}/${id}`);
+
+// ==========================================
+// Ministries & Directorates API Calls
+// ==========================================
+export const getAllMinistries = () => axios.get(REST_MINISTRY_API_BASE_URL);
+
+export const getAllDirectorates = () => axios.get(REST_DIRECTORATE_API_BASE_URL);
+
+// Cascading endpoint to fetch directorates by ministry ID
+export const getDirectoratesByMinistry = (ministryId) =>
+  axios.get(`${REST_DIRECTORATE_API_BASE_URL}/ministry/${ministryId}`);
