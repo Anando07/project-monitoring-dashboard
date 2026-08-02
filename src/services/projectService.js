@@ -1,27 +1,22 @@
-import api from "./api";
+import axios from "axios";
 
-const ProjectService = {
+const REST_PROJECT_API_BASE_URL = "http://localhost:8080/api/projects";
 
-    getAll() {
-        return api.get("/projects");
-    },
+// Fetch all projects
+export const getAllProjects = () => axios.get(REST_PROJECT_API_BASE_URL);
 
-    getById(id) {
-        return api.get(`/projects/${id}`);
-    },
+// Fetch projects belonging to a specific ministry
+export const getProjectsByMinistryApi = (ministryId) =>
+  axios.get(`${REST_PROJECT_API_BASE_URL}/ministry/${ministryId}`);
 
-    save(data) {
-        return api.post("/projects", data);
-    },
+// Create a new project under a ministry
+export const createProjectApi = (projectData) =>
+  axios.post(REST_PROJECT_API_BASE_URL, projectData);
 
-    update(id, data) {
-        return api.put(`/projects/${id}`, data);
-    },
+// Update an existing project record by ID
+export const updateProjectApi = (id, projectData) =>
+  axios.put(`${REST_PROJECT_API_BASE_URL}/${id}`, projectData);
 
-    delete(id) {
-        return api.delete(`/projects/${id}`);
-    }
-
-};
-
-export default ProjectService;
+// Delete a project record
+export const deleteProjectApi = (id) =>
+  axios.delete(`${REST_PROJECT_API_BASE_URL}/${id}`);

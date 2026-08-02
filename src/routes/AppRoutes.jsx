@@ -16,6 +16,7 @@ import Settings from "../pages/Settings";
 import Users from "../pages/AdminPannel/Users";
 import Passcode from "../pages/AdminPannel/Passcode";
 import Ministry from "../pages/AdminPannel/Ministry";
+import Directorate from "../pages/AdminPannel/Directorate";
 
 const AppRoutes = () => {
 
@@ -94,9 +95,14 @@ const AppRoutes = () => {
                     element={<Passcode />}
                 />
 
-                 <Route 
+                <Route 
                     path="/admin/ministry"
                     element={<Ministry />}
+                />
+
+                <Route 
+                    path="/admin/directorate"
+                    element={<Directorate/>}
                 />
 
 
