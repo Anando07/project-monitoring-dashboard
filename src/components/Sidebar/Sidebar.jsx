@@ -75,10 +75,10 @@ const menus = [
     name: "Office Management",
     icon: <FaSitemap />,
     children: [
-      { name: "Create Ministry", icon: <FaLandmark />, path: "/office/create-ministry" },
-      { name: "Create Division", icon: <FaSitemap />, path: "/office/create-division" },
-      { name: "Create Directorate", icon: <FaBuilding />, path: "/office/create-directorate" },
-      { name: "Create Divisional Office", icon: <FaCity />, path: "/office/create-divisional-office" }
+      { name: "Ministry", icon: <FaLandmark />, path: "/admin/ministry" },
+      { name: "Division", icon: <FaSitemap />, path: "/admin/division" },
+      { name: "Directorate", icon: <FaBuilding />, path: "/admin/directorate" },
+      { name: "Divisional Office", icon: <FaCity />, path: "/admin/divisional-office" }
     ]
   },
   {
