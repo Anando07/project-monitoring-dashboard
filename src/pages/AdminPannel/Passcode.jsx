@@ -269,7 +269,7 @@ function Passcode() {
                   <option value="">-- Select User --</option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
-                      #{u.id} - {u.name} ({u.designation || "Officer"})
+                      {u.name} ({u.designation || "Officer"})
                     </option>
                   ))}
                 </select>
@@ -447,7 +447,7 @@ function Passcode() {
               <input
                 type="text"
                 className="form-control bg-light border-start-0"
-                placeholder="Search user ID, role, ministry..."
+                placeholder="Search user, role, ministry..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -493,7 +493,7 @@ function Passcode() {
 
                       return (
                         <tr key={record.id} style={{ verticalAlign: "middle" }}>
-                          {/* 1. User ID, Name & Designation */}
+                          {/* 1. Name & Designation */}
                           <td className="align-middle">
                             <div className="d-flex align-items-center gap-2 py-1">
                               <div
@@ -504,9 +504,6 @@ function Passcode() {
                               </div>
                               <div>
                                 <div className="d-flex align-items-center gap-1">
-                                  <span className="bg-secondary font-monospace" style={{ fontSize: "0.72rem" }}>
-                                    #{details.userId}
-                                  </span>
                                   <span className="fw-bold text-dark lh-sm">
                                     {details.userName}
                                   </span>
@@ -633,9 +630,8 @@ function Passcode() {
         <table className="pms-print-table">
           <thead>
             <tr>
-              <th style={{ width: "10%" }}>User ID</th>
-              <th style={{ width: "25%" }}>Name & Designation</th>
-              <th style={{ width: "25%" }}>Office & Ministry</th>
+              <th style={{ width: "30%" }}>Name & Designation</th>
+              <th style={{ width: "30%" }}>Office & Ministry</th>
               <th style={{ width: "20%" }}>Role</th>
               <th style={{ width: "20%" }}>Expiration Date</th>
             </tr>
@@ -645,7 +641,6 @@ function Passcode() {
               const details = resolveUserDetail(item);
               return (
                 <tr key={item.id}>
-                  <td>#{details.userId}</td>
                   <td>
                     <strong>{details.userName}</strong>
                     <br />

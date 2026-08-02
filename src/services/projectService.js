@@ -1,27 +1,33 @@
-import api from "./api";
+import axios from "axios";
 
-const ProjectService = {
+// Base API Endpoint
+const API_BASE_URL = "http://localhost:8080/api";
 
-    getAll() {
-        return api.get("/projects");
-    },
+// Endpoint URLs
+const REST_PROJECT_API_BASE_URL = `${API_BASE_URL}/projects`;
+const REST_MINISTRY_API_BASE_URL = `${API_BASE_URL}/ministries`;
+const REST_DIRECTORATE_API_BASE_URL = `${API_BASE_URL}/directorates`;
 
-    getById(id) {
-        return api.get(`/projects/${id}`);
-    },
+// ==========================================
+// Projects API Calls
+// ==========================================
+export const getAllProjects = () => axios.get(REST_PROJECT_API_BASE_URL);
 
-    save(data) {
-        return api.post("/projects", data);
-    },
+export const getProjectById = (id) => axios.get(`${REST_PROJECT_API_BASE_URL}/${id}`);
 
-    update(id, data) {
-        return api.put(`/projects/${id}`, data);
-    },
+export const createProject = (project) => axios.post(REST_PROJECT_API_BASE_URL, project);
 
-    delete(id) {
-        return api.delete(`/projects/${id}`);
-    }
+export const updateProject = (id, project) => axios.put(`${REST_PROJECT_API_BASE_URL}/${id}`, project);
 
-};
+export const deleteProject = (id) => axios.delete(`${REST_PROJECT_API_BASE_URL}/${id}`);
 
-export default ProjectService;
+// ==========================================
+// Ministries & Directorates API Calls
+// ==========================================
+export const getAllMinistries = () => axios.get(REST_MINISTRY_API_BASE_URL);
+
+export const getAllDirectorates = () => axios.get(REST_DIRECTORATE_API_BASE_URL);
+
+// Cascading endpoint to fetch directorates by ministry ID
+export const getDirectoratesByMinistry = (ministryId) =>
+  axios.get(`${REST_DIRECTORATE_API_BASE_URL}/ministry/${ministryId}`);
