@@ -32,6 +32,8 @@ import {
   ChevronRight
 } from "lucide-react";
 
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
+
 const INITIAL_FORM_STATE = {
   id: null,
   name: "",
@@ -51,7 +53,7 @@ function Users() {
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
   const [ministries, setMinistries] = useState([]);
-  
+
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [errors, setErrors] = useState({});
   const [isEditing, setIsEditing] = useState(false);
@@ -118,25 +120,37 @@ function Users() {
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }));
   };
 
-  // Image Upload Handler
+  // Image Upload Handler (aligned with Projects.jsx handleImagesChange pattern)
   const handleImageChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        setErrors((prev) => ({ ...prev, avatar: "Image size should be less than 2MB." }));
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData((prev) => ({ ...prev, avatar: reader.result }));
-        if (errors.avatar) setErrors((prev) => ({ ...prev, avatar: null }));
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setErrors((prev) => ({ ...prev, avatar: "Please select a valid image file." }));
+      e.target.value = "";
+      return;
     }
+
+    if (file.size > MAX_AVATAR_BYTES) {
+      setErrors((prev) => ({ ...prev, avatar: "Image size should be less than 2MB." }));
+      e.target.value = "";
+      return;
+    }
+
+    if (errors.avatar) setErrors((prev) => ({ ...prev, avatar: null }));
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormData((prev) => ({ ...prev, avatar: reader.result }));
+    };
+    reader.readAsDataURL(file);
+
+    e.target.value = "";
   };
 
   const handleRemoveImage = () => {
     setFormData((prev) => ({ ...prev, avatar: "" }));
+    if (errors.avatar) setErrors((prev) => ({ ...prev, avatar: null }));
   };
 
   const handleReset = () => {
@@ -341,8 +355,8 @@ function Users() {
                 >
                   <option value="">-- Select Ministry / Division --</option>
                   {ministries.map((m) => (
-                    <option key={m.id || m.name} value={m.name}>
-                      {m.name}
+                    <option key={m.id || m.minName} value={m.minName}>
+                      {m.minName}
                     </option>
                   ))}
                 </select>

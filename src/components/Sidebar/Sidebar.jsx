@@ -75,8 +75,7 @@ const menus = [
     name: "Office Management",
     icon: <FaSitemap />,
     children: [
-      { name: "Ministry", icon: <FaLandmark />, path: "/admin/ministry" },
-      { name: "Division", icon: <FaSitemap />, path: "/admin/division" },
+      { name: "Ministry/Division", icon: <FaLandmark />, path: "/admin/ministry" },
       { name: "Directorate", icon: <FaBuilding />, path: "/admin/directorate" },
       { name: "Divisional Office", icon: <FaCity />, path: "/admin/divisional-office" }
     ]
