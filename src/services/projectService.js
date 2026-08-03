@@ -15,7 +15,17 @@ export const getAllProjects = () => axios.get(REST_PROJECT_API_BASE_URL);
 
 export const getProjectById = (id) => axios.get(`${REST_PROJECT_API_BASE_URL}/${id}`);
 
-export const createProject = (project) => axios.post(REST_PROJECT_API_BASE_URL, project);
+export const createProject = async (project) => {
+    try {
+        const response = await axios.post(REST_PROJECT_API_BASE_URL, project);
+        return response;
+    } catch (error) {
+        console.log("Status:", error.response?.status);
+        console.log("Response:", error.response?.data);
+        console.log("Request:", project);
+        throw error;
+    }
+};
 
 export const updateProject = (id, project) => axios.put(`${REST_PROJECT_API_BASE_URL}/${id}`, project);
 

@@ -28,30 +28,39 @@ import {
 } from "../../services/ProjectService";
 
 const PRIORITIES = ["High", "Medium", "Low"];
-const STATUS_OPTIONS = ["Approved", "Unapproved", "Processing"];
+const STATUS_OPTIONS = ["Approved", "Unapproved"];
 const MAX_IMAGE_BYTES = 1 * 1024 * 1024; // 1 MB
 
 const priorityPillClass = (priority) => {
   const p = (priority || "").toUpperCase();
-  if (p === "HIGH") return "bg-danger-subtle text-danger-emphasis border border-danger-subtle";
-  if (p === "MEDIUM") return "bg-warning-subtle text-warning-emphasis border border-warning-subtle";
-  return "bg-success-subtle text-success-emphasis border border-success-subtle";
+  if (p === "HIGH") return "bg-danger-subtle text-danger-emphasis border border-danger-subtle px-2 py-1";
+  if (p === "MEDIUM") return "bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1";
+  return "bg-success-subtle text-success-emphasis border border-success-subtle px-2 py-1";
 };
 
 const statusPillClass = (status) => {
   const s = (status || "").toUpperCase();
-  if (s === "APPROVED") return "bg-success-subtle text-success-emphasis border border-success-subtle";
-  if (s === "PROCESSING") return "bg-warning-subtle text-warning-emphasis border border-warning-subtle";
-  return "bg-danger-subtle text-danger-emphasis border border-danger-subtle";
+  if (s === "APPROVED") return "bg-success-subtle text-success-emphasis border border-success-subtle px-2 py-1";
+  if (s === "UNAPPROVED") return "bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1";
+  return "bg-danger-subtle text-danger-emphasis border border-danger-subtle px-2 py-1";
 };
 
-const calcDuration = (start, end) => {
+const approvedCalcDuration = (start, end) => {
   if (!start || !end) return "";
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  const diffYears = (endDate - startDate) / (1000 * 60 * 60 * 24 * 365.25);
-  if (isNaN(diffYears) || diffYears < 0) return "";
-  return `${diffYears.toFixed(1)} yr`;
+  const approvedStartDate = new Date(start);
+  const approvedEndDate = new Date(end);
+  const approvedDiffYears = (approvedEndDate - approvedStartDate) / (1000 * 60 * 60 * 24 * 365.25);
+  if (isNaN(approvedDiffYears) || approvedDiffYears < 0) return "";
+  return `${approvedDiffYears.toFixed(1)} yr`;
+};
+
+const revisedCalcDuration = (start, end) => {
+  if (!start || !end) return "";
+  const revisedStartDate = new Date(start);
+  const revisedEndDate = new Date(end);
+  const revisedDiffYears = (revisedEndDate - revisedStartDate) / (1000 * 60 * 60 * 24 * 365.25);
+  if (isNaN(revisedDiffYears) || revisedDiffYears < 0) return "";
+  return `${revisedDiffYears.toFixed(1)} yr`;
 };
 
 const formatDate = (isoDate) => {
@@ -64,15 +73,18 @@ const INITIAL_FORM_STATE = {
   projectName: "",
   ministryId: "",
   directorateId: "",
-  startDate: "",
-  endDate: "",
-  totalBudget: "",
+  approvedStartDate: "",
+  approvedEndDate: "",
+  approvedBudget: "",
+  revisedStartDate: "",
+  revisedEndDate: "",
+  revisedBudget: "",
   priority: "Medium",
   status: "Approved",
   images: []
 };
 
-function Projects() {
+export default function Projects() {
   const [projects, setProjects] = useState([]);
   const [ministries, setMinistries] = useState([]);
   const [directorates, setDirectorates] = useState([]);
@@ -205,18 +217,47 @@ function Projects() {
 
   const validateForm = () => {
     const newErrors = {};
+
+    // Required Field Validations
     if (!formData.projectName || !formData.projectName.trim()) {
       newErrors.projectName = "Project name is required.";
     }
-    if (!formData.ministryId) newErrors.ministryId = "Select parent ministry.";
-    if (!formData.startDate) newErrors.startDate = "Start date is required.";
-    if (!formData.endDate) newErrors.endDate = "End date is required.";
-    if (formData.startDate && formData.endDate && formData.endDate < formData.startDate) {
-      newErrors.endDate = "End date must be after start date.";
+    if (!formData.ministryId) {
+      newErrors.ministryId = "Select parent ministry.";
     }
-    if (!formData.totalBudget || Number(formData.totalBudget) <= 0) {
-      newErrors.totalBudget = "Valid total budget is required.";
+
+    // Approved Dates & Budget (Required)
+    if (!formData.approvedStartDate) {
+      newErrors.approvedStartDate = "Start date is required.";
     }
+    if (!formData.approvedEndDate) {
+      newErrors.approvedEndDate = "End date is required.";
+    }
+    if (
+      formData.approvedStartDate &&
+      formData.approvedEndDate &&
+      formData.approvedEndDate < formData.approvedStartDate
+    ) {
+      newErrors.approvedEndDate = "End date must be after start date.";
+    }
+    if (!formData.approvedBudget || Number(formData.approvedBudget) <= 0) {
+      newErrors.approvedBudget = "Valid approved budget is required.";
+    }
+
+    // Revised Dates (Optional: Validated only if both values exist)
+    if (
+      formData.revisedStartDate &&
+      formData.revisedEndDate &&
+      formData.revisedEndDate < formData.revisedStartDate
+    ) {
+      newErrors.revisedEndDate = "Revised end date must be after revised start date.";
+    }
+
+    // Revised Budget (Optional: Validated only if entered)
+    if (formData.revisedBudget && Number(formData.revisedBudget) <= 0) {
+      newErrors.revisedBudget = "Valid revised budget is required.";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -229,9 +270,12 @@ function Projects() {
       projectName: formData.projectName.trim(),
       ministryId: Number(formData.ministryId),
       directorateId: formData.directorateId ? Number(formData.directorateId) : null,
-      startDate: formData.startDate,
-      endDate: formData.endDate,
-      totalBudget: Number(formData.totalBudget),
+      approvedStartDate: formData.approvedStartDate,
+      approvedEndDate: formData.approvedEndDate,
+      approvedBudget: Number(formData.approvedBudget),
+      revisedStartDate: formData.revisedStartDate ? formData.revisedStartDate : null,
+      revisedEndDate: formData.revisedEndDate ? formData.revisedEndDate : null,
+      revisedBudget: formData.revisedBudget ? Number(formData.revisedBudget) : null,
       priority: formData.priority.toUpperCase(),
       status: formData.status.toUpperCase(),
       images: formData.images
@@ -283,9 +327,12 @@ function Projects() {
       projectName: project.projectName || "",
       ministryId: String(project.ministryId || ""),
       directorateId: String(project.directorateId || ""),
-      startDate: project.startDate || "",
-      endDate: project.endDate || "",
-      totalBudget: project.totalBudget || "",
+      approvedStartDate: project.approvedStartDate || "",
+      approvedEndDate: project.approvedEndDate || "",
+      approvedBudget: project.approvedBudget || "",
+      revisedStartDate: project.revisedStartDate || "",
+      revisedEndDate: project.revisedEndDate || "",
+      revisedBudget: project.revisedBudget || "",
       priority: project.priority
         ? project.priority.charAt(0) + project.priority.slice(1).toLowerCase()
         : "Medium",
@@ -395,53 +442,99 @@ function Projects() {
                 </select>
               </div>
 
-              {/* Row 2: Dates, Budget */}
+              {/* Row 2: Approved Dates & Budget */}
               <div className="col-md-4">
                 <label className="form-label fw-semibold">
-                  Start Date <span className="text-danger">*</span>
+                  Approved Start Date <span className="text-danger">*</span>
                 </label>
                 <input
                   type="date"
-                  name="startDate"
-                  value={formData.startDate}
+                  name="approvedStartDate"
+                  value={formData.approvedStartDate}
                   onChange={handleInputChange}
-                  className={`form-control ${errors.startDate ? "is-invalid" : ""}`}
+                  className={`form-control ${errors.approvedStartDate ? "is-invalid" : ""}`}
                 />
-                {errors.startDate && <div className="invalid-feedback">{errors.startDate}</div>}
+                {errors.approvedStartDate && <div className="invalid-feedback">{errors.approvedStartDate}</div>}
               </div>
 
               <div className="col-md-4">
                 <label className="form-label fw-semibold">
-                  End Date <span className="text-danger">*</span>
+                  Approved End Date <span className="text-danger">*</span>
                 </label>
                 <input
                   type="date"
-                  name="endDate"
-                  value={formData.endDate}
+                  name="approvedEndDate"
+                  value={formData.approvedEndDate}
                   onChange={handleInputChange}
-                  className={`form-control ${errors.endDate ? "is-invalid" : ""}`}
+                  className={`form-control ${errors.approvedEndDate ? "is-invalid" : ""}`}
                 />
-                {errors.endDate && <div className="invalid-feedback">{errors.endDate}</div>}
+                {errors.approvedEndDate && <div className="invalid-feedback">{errors.approvedEndDate}</div>}
               </div>
 
               <div className="col-md-4">
                 <label className="form-label fw-semibold">
-                  Total Budget (Cr) <span className="text-danger">*</span>
+                  Approved Budget (Lakhs of TK) <span className="text-danger">*</span>
                 </label>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
-                  name="totalBudget"
+                  name="approvedBudget"
                   placeholder="0.00"
-                  value={formData.totalBudget}
+                  value={formData.approvedBudget}
                   onChange={handleInputChange}
-                  className={`form-control ${errors.totalBudget ? "is-invalid" : ""}`}
+                  className={`form-control ${errors.approvedBudget ? "is-invalid" : ""}`}
                 />
-                {errors.totalBudget && <div className="invalid-feedback">{errors.totalBudget}</div>}
+                {errors.approvedBudget && <div className="invalid-feedback">{errors.approvedBudget}</div>}
               </div>
 
-              {/* Row 3: Priority, Status */}
+              {/* Row 3: Revised Dates & Budget (Optional) */}
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">
+                  Revised Start Date <span className="text-muted fw-normal">(Optional)</span>
+                </label>
+                <input
+                  type="date"
+                  name="revisedStartDate"
+                  value={formData.revisedStartDate}
+                  onChange={handleInputChange}
+                  className={`form-control ${errors.revisedStartDate ? "is-invalid" : ""}`}
+                />
+                {errors.revisedStartDate && <div className="invalid-feedback">{errors.revisedStartDate}</div>}
+              </div>
+
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">
+                  Revised End Date <span className="text-muted fw-normal">(Optional)</span>
+                </label>
+                <input
+                  type="date"
+                  name="revisedEndDate"
+                  value={formData.revisedEndDate}
+                  onChange={handleInputChange}
+                  className={`form-control ${errors.revisedEndDate ? "is-invalid" : ""}`}
+                />
+                {errors.revisedEndDate && <div className="invalid-feedback">{errors.revisedEndDate}</div>}
+              </div>
+
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">
+                  Revised Budget (Lakhs of TK) <span className="text-muted fw-normal">(Optional)</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  name="revisedBudget"
+                  placeholder="0.00"
+                  value={formData.revisedBudget}
+                  onChange={handleInputChange}
+                  className={`form-control ${errors.revisedBudget ? "is-invalid" : ""}`}
+                />
+                {errors.revisedBudget && <div className="invalid-feedback">{errors.revisedBudget}</div>}
+              </div>
+
+              {/* Row 4: Priority & Status */}
               <div className="col-md-6">
                 <label className="form-label fw-semibold">
                   Priority <span className="text-danger">*</span>
@@ -474,7 +567,7 @@ function Projects() {
                 </select>
               </div>
 
-              {/* Row 4: Images & Actions */}
+              {/* Row 5: Images & Actions */}
               <div className="col-12 mt-3">
                 <label className="form-label fw-semibold d-flex align-items-center gap-1">
                   <ImageIcon size={15} /> Attach Images <span className="text-muted fw-normal">(Optional, max 1 MB each)</span>
@@ -602,8 +695,10 @@ function Projects() {
                   <tr>
                     <th>Project Name</th>
                     <th>Ministry & Directorate</th>
-                    <th>Timeline</th>
-                    <th>Budget</th>
+                    <th>Approved Timeline</th>
+                    <th>Approved Budget</th>
+                    <th>Revised Timeline</th>
+                    <th>Revised Budget</th>
                     <th>Priority</th>
                     <th>Status</th>
                     <th className="text-end">Actions</th>
@@ -620,6 +715,8 @@ function Projects() {
                       const formattedStatus = project.status
                         ? project.status.charAt(0) + project.status.slice(1).toLowerCase()
                         : "";
+
+                      const revisedDuration = revisedCalcDuration(project.revisedStartDate, project.revisedEndDate);
 
                       return (
                         <tr key={project.id}>
@@ -661,22 +758,42 @@ function Projects() {
                           <td className="align-middle">
                             <span className="d-flex align-items-center gap-1 text-muted small">
                               <Calendar size={13} className="flex-shrink-0" />
-                              {formatDate(project.startDate)} - {formatDate(project.endDate)}
+                              {formatDate(project.approvedStartDate)} - {formatDate(project.approvedEndDate)}
                             </span>
                             <small className="text-secondary d-block mt-1">
-                              Duration: {calcDuration(project.startDate, project.endDate)}
+                              Duration: {approvedCalcDuration(project.approvedStartDate, project.approvedEndDate)}
                             </small>
                           </td>
                           <td className="align-middle fw-semibold text-dark">
-                            ৳ {Number(project.totalBudget).toFixed(2)} Cr
+                            ৳ {Number(project.approvedBudget || 0).toFixed(2)} Lakhs
                           </td>
                           <td className="align-middle">
-                            <span className={`rounded-pill ${priorityPillClass(formattedPriority)}`}>
+                            {project.revisedStartDate || project.revisedEndDate ? (
+                              <>
+                                <span className="d-flex align-items-center gap-1 text-muted small">
+                                  <Calendar size={13} className="flex-shrink-0" />
+                                  {formatDate(project.revisedStartDate) || "—"} - {formatDate(project.revisedEndDate) || "—"}
+                                </span>
+                                {revisedDuration && (
+                                  <small className="text-secondary d-block mt-1">
+                                    Duration: {revisedDuration}
+                                  </small>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-muted small">—</span>
+                            )}
+                          </td>
+                          <td className="align-middle fw-semibold text-dark">
+                            {project.revisedBudget ? `৳ ${Number(project.revisedBudget).toFixed(2)} Lakhs` : "—"}
+                          </td>
+                          <td className="align-middle">
+                            <span className={priorityPillClass(formattedPriority)}>
                               {formattedPriority}
                             </span>
                           </td>
                           <td className="align-middle">
-                            <span className={`rounded-pill ${statusPillClass(formattedStatus)}`}>
+                            <span className={statusPillClass(formattedStatus)}>
                               {formattedStatus}
                             </span>
                           </td>
@@ -692,14 +809,14 @@ function Projects() {
                               <button
                                 onClick={() => handleEdit(project)}
                                 className="btn btn-outline-primary"
-                                title="Edit Project"
+                                title="Edit Record"
                               >
                                 <Edit2 size={14} />
                               </button>
                               <button
                                 onClick={() => handleDelete(project.id)}
                                 className="btn btn-outline-danger"
-                                title="Delete Project"
+                                title="Delete Record"
                               >
                                 <Trash2 size={14} />
                               </button>
@@ -710,9 +827,8 @@ function Projects() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan="7" className="text-center py-5 text-muted">
-                        <AlertCircle size={32} className="mb-2" />
-                        <p className="mb-0">No project records found in database.</p>
+                      <td colSpan="9" className="text-center py-4 text-muted">
+                        No projects found matching the criteria.
                       </td>
                     </tr>
                   )}
@@ -723,80 +839,76 @@ function Projects() {
         </div>
       </div>
 
-      {/* View Modal */}
+      {/* View Details Modal */}
       {viewProject && (
-        <div
-          className="modal d-block"
-          style={{ background: "rgba(0,0,0,0.5)" }}
-          onClick={() => setViewProject(null)}
-        >
-          <div className="modal-dialog modal-dialog-centered modal-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="modal fade show d-block tab-index-1" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+          <div className="modal-dialog modal-lg modal-dialog-centered">
             <div className="modal-content border-0 shadow">
-              <div className="modal-header bg-white border-bottom py-3">
+              <div className="modal-header bg-light">
                 <h5 className="modal-title fw-bold text-primary">{viewProject.projectName}</h5>
-                <button type="button" className="btn-close" onClick={() => setViewProject(null)} />
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setViewProject(null)}
+                ></button>
               </div>
-
               <div className="modal-body p-4">
-                {viewProject.images && viewProject.images.length > 0 && (
-                  <div className="mb-4">
-                    <h6 className="fw-bold mb-2">Project Media</h6>
-                    <div className="d-flex flex-wrap gap-2">
-                      {viewProject.images.map((src, idx) => (
-                        <img
-                          key={idx}
-                          src={src}
-                          alt={`${viewProject.projectName} ${idx + 1}`}
-                          className="rounded border shadow-sm"
-                          style={{ width: 90, height: 90, objectFit: "cover" }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <h6 className="fw-bold mb-3">Project Metadata</h6>
                 <div className="row g-3">
-                  <div className="col-6 col-md-4">
-                    <div className="text-muted small">Parent Ministry</div>
-                    <div className="fw-semibold">{ministriesMap[viewProject.ministryId] || "—"}</div>
+                  <div className="col-md-6">
+                    <strong className="d-block text-muted small">Parent Ministry</strong>
+                    <span>{ministriesMap[viewProject.ministryId] || "—"}</span>
                   </div>
-                  <div className="col-6 col-md-4">
-                    <div className="text-muted small">Directorate</div>
-                    <div className="fw-semibold">{allDirectoratesMap[viewProject.directorateId] || "—"}</div>
+                  <div className="col-md-6">
+                    <strong className="d-block text-muted small">Directorate</strong>
+                    <span>{allDirectoratesMap[viewProject.directorateId] || "—"}</span>
                   </div>
-                  <div className="col-6 col-md-4">
-                    <div className="text-muted small">Total Budget</div>
-                    <div className="fw-semibold">৳ {Number(viewProject.totalBudget).toFixed(2)} Cr</div>
+                  <div className="col-md-6">
+                    <strong className="d-block text-muted small">Approved Timeline</strong>
+                    <span>{formatDate(viewProject.approvedStartDate)} to {formatDate(viewProject.approvedEndDate)}</span>
                   </div>
-                  <div className="col-6 col-md-4">
-                    <div className="text-muted small">Start Date</div>
-                    <div className="fw-semibold">{formatDate(viewProject.startDate)}</div>
+                  <div className="col-md-6">
+                    <strong className="d-block text-muted small">Approved Budget</strong>
+                    <span>৳ {Number(viewProject.approvedBudget || 0).toFixed(2)} Lakhs</span>
                   </div>
-                  <div className="col-6 col-md-4">
-                    <div className="text-muted small">End Date</div>
-                    <div className="fw-semibold">{formatDate(viewProject.endDate)}</div>
-                  </div>
-                  <div className="col-6 col-md-4">
-                    <div className="text-muted small">Estimated Duration</div>
-                    <div className="fw-semibold">{calcDuration(viewProject.startDate, viewProject.endDate)}</div>
-                  </div>
-                  <div className="col-6 col-md-4">
-                    <div className="text-muted small">Priority</div>
-                    <span className={`badge rounded-pill ${priorityPillClass(viewProject.priority)}`}>
-                      {viewProject.priority}
+                  <div className="col-md-6">
+                    <strong className="d-block text-muted small">Revised Timeline</strong>
+                    <span>
+                      {viewProject.revisedStartDate || viewProject.revisedEndDate
+                        ? `${formatDate(viewProject.revisedStartDate) || "—"} to ${formatDate(viewProject.revisedEndDate) || "—"}`
+                        : "—"}
                     </span>
                   </div>
-                  <div className="col-6 col-md-4">
-                    <div className="text-muted small">Status</div>
-                    <span className={`badge rounded-pill ${statusPillClass(viewProject.status)}`}>
-                      {viewProject.status}
-                    </span>
+                  <div className="col-md-6">
+                    <strong className="d-block text-muted small">Revised Budget</strong>
+                    <span>{viewProject.revisedBudget ? `৳ ${Number(viewProject.revisedBudget).toFixed(2)} Lakhs` : "—"}</span>
                   </div>
+                  <div className="col-md-6">
+                    <strong className="d-block text-muted small">Priority</strong>
+                    <span className={priorityPillClass(viewProject.priority)}>{viewProject.priority}</span>
+                  </div>
+                  <div className="col-md-6">
+                    <strong className="d-block text-muted small">Status</strong>
+                    <span className={statusPillClass(viewProject.status)}>{viewProject.status}</span>
+                  </div>
+                  {viewProject.images && viewProject.images.length > 0 && (
+                    <div className="col-12 mt-3">
+                      <strong className="d-block text-muted small mb-2">Attached Images</strong>
+                      <div className="d-flex flex-wrap gap-2">
+                        {viewProject.images.map((img, idx) => (
+                          <img
+                            key={idx}
+                            src={img}
+                            alt={`Project attachment ${idx + 1}`}
+                            className="rounded border shadow-sm"
+                            style={{ width: "90px", height: "90px", objectFit: "cover" }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-
-              <div className="modal-footer border-top bg-light">
+              <div className="modal-footer bg-light">
                 <button className="btn btn-secondary" onClick={() => setViewProject(null)}>
                   Close
                 </button>
@@ -805,82 +917,6 @@ function Projects() {
           </div>
         </div>
       )}
-
-      {/* Printable / PDF Export View */}
-      <div className="pms-print-only">
-        <style>{`
-          @media screen {
-            .pms-print-only {
-              display: none !important;
-            }
-          }
-          @media print {
-            body * {
-              visibility: hidden !important;
-            }
-            .pms-print-only, .pms-print-only * {
-              visibility: visible !important;
-            }
-            .pms-print-only {
-              position: absolute !important;
-              left: 0 !important;
-              top: 0 !important;
-              width: 100% !important;
-              display: block !important;
-              padding: 20px !important;
-              background: #fff !important;
-            }
-            .pms-print-table {
-              width: 100% !important;
-              border-collapse: collapse !important;
-              margin-top: 15px !important;
-            }
-            .pms-print-table th, .pms-print-table td {
-              border: 1px solid #000 !important;
-              padding: 8px 10px !important;
-              font-size: 12px !important;
-              vertical-align: top !important;
-            }
-            .pms-print-table th {
-              background-color: #f2f2f2 !important;
-              font-weight: bold !important;
-              -webkit-print-color-adjust: exact;
-            }
-          }
-        `}</style>
-
-        <h2 style={{ textAlign: "center", marginBottom: "4px" }}>Project Directory Report</h2>
-        <p style={{ textAlign: "center", color: "#666", marginBottom: "20px", fontSize: "12px" }}>
-          Date Generated: {new Date().toLocaleDateString()} | Total Records: {filteredProjects.length}
-        </p>
-
-        <table className="pms-print-table">
-          <thead>
-            <tr>
-              <th style={{ width: "25%" }}>Project Name</th>
-              <th style={{ width: "20%" }}>Ministry</th>
-              <th style={{ width: "20%" }}>Directorate</th>
-              <th style={{ width: "15%" }}>Budget (Cr)</th>
-              <th style={{ width: "10%" }}>Priority</th>
-              <th style={{ width: "10%" }}>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredProjects.map((project) => (
-              <tr key={project.id}>
-                <td>{project.projectName}</td>
-                <td>{ministriesMap[project.ministryId] || "—"}</td>
-                <td>{allDirectoratesMap[project.directorateId] || "—"}</td>
-                <td>৳ {Number(project.totalBudget).toFixed(2)}</td>
-                <td>{project.priority}</td>
-                <td>{project.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
-
-export default Projects;
