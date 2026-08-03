@@ -35,16 +35,16 @@ import {
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
 
 const INITIAL_FORM_STATE = {
-  id: null,
-  name: "",
-  designation: "",
-  officeName: "",
-  roleId: "",
-  minDiv: "",
-  email: "",
-  number: "",
-  active: true,
-  avatar: ""
+    id: null,
+    name: "",
+    designation: "",
+    officeName: "",
+    roleId: "",
+    ministryId: "",
+    email: "",
+    number: "",
+    active: true,
+    avatar: ""
 };
 
 const USERS_PER_PAGE = 10;
@@ -89,8 +89,12 @@ function Users() {
       setRoles(rolesRes.data || []);
       setMinistries(ministriesRes.data || []);
 
-      if (rolesRes.data && rolesRes.data.length > 0) {
-        setFormData((prev) => ({ ...prev, roleId: rolesRes.data[0].id }));
+     if (rolesRes.data?.length > 0 || ministriesRes.data?.length > 0) {
+          setFormData(prev => ({
+              ...prev,
+              roleId: rolesRes.data?.length ? rolesRes.data[0].id : "",
+              ministryId: ministriesRes.data?.length ? ministriesRes.data[0].id : ""
+          }));
       }
       setLoading(false);
     } catch (error) {
@@ -107,17 +111,36 @@ function Users() {
   };
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
+      const { name, value } = e.target;
 
-    if (name === "active") {
-      setFormData((prev) => ({ ...prev, active: value === "true" }));
-    } else if (name === "roleId") {
-      setFormData((prev) => ({ ...prev, roleId: Number(value) }));
-    } else {
-      setFormData((prev) => ({ ...prev, [name]: value }));
-    }
+      if (name === "active") {
+          setFormData(prev => ({
+              ...prev,
+              active: value === "true"
+          }));
+      } else if (name === "roleId") {
+          setFormData(prev => ({
+              ...prev,
+              roleId: Number(value)
+          }));
+      } else if (name === "ministryId") {
+          setFormData(prev => ({
+              ...prev,
+              ministryId: Number(value)
+          }));
+      } else {
+          setFormData(prev => ({
+              ...prev,
+              [name]: value
+          }));
+      }
 
-    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }));
+      if (errors[name]) {
+          setErrors(prev => ({
+              ...prev,
+              [name]: null
+          }));
+      }
   };
 
   // Image Upload Handler (aligned with Projects.jsx handleImagesChange pattern)
@@ -152,14 +175,16 @@ function Users() {
     setFormData((prev) => ({ ...prev, avatar: "" }));
     if (errors.avatar) setErrors((prev) => ({ ...prev, avatar: null }));
   };
-
+  
   const handleReset = () => {
-    setFormData({
-      ...INITIAL_FORM_STATE,
-      roleId: roles.length > 0 ? roles[0].id : ""
-    });
-    setErrors({});
-    setIsEditing(false);
+      setFormData({
+          ...INITIAL_FORM_STATE,
+          roleId: roles.length > 0 ? roles[0].id : "",
+          ministryId: ""
+      });
+
+      setErrors({});
+      setIsEditing(false);
   };
 
   const validateForm = () => {
@@ -167,7 +192,7 @@ function Users() {
     if (!formData.name.trim()) newErrors.name = "Full name is required.";
     if (!formData.designation.trim()) newErrors.designation = "Designation is required.";
     if (!formData.officeName.trim()) newErrors.officeName = "Office name is required.";
-    if (!formData.minDiv) newErrors.minDiv = "Select a Ministry or Division.";
+    if (!formData.ministryId) newErrors.ministryId = "Select a Ministry or Division.";
     if (!formData.roleId) newErrors.roleId = "Role Privilege is required.";
     if (!formData.email.trim()) {
       newErrors.email = "Email address is required.";
@@ -213,8 +238,8 @@ function Users() {
       name: user.name || "",
       designation: user.designation || "",
       officeName: user.officeName || "",
-      roleId: user.roleId || (roles.length > 0 ? roles[0].id : ""),
-      minDiv: user.minDiv || "",
+      roleId: user.roleId || "",
+      ministryId: user.ministryId || "",
       email: user.email || "",
       number: user.number || "",
       active: user.active ?? true,
@@ -264,7 +289,7 @@ function Users() {
         (item.name && item.name.toLowerCase().includes(query)) ||
         (item.designation && item.designation.toLowerCase().includes(query)) ||
         (item.officeName && item.officeName.toLowerCase().includes(query)) ||
-        (item.minDiv && item.minDiv.toLowerCase().includes(query)) ||
+        (item.ministryName && item.ministryName.toLowerCase().includes(query)) ||
         roleName.includes(query) ||
         statusString.includes(query) ||
         (item.email && item.email.toLowerCase().includes(query)) ||
@@ -348,19 +373,24 @@ function Users() {
                   Ministry / Division <span className="text-danger">*</span>
                 </label>
                 <select
-                  name="minDiv"
-                  value={formData.minDiv}
-                  onChange={handleInputChange}
-                  className={`form-select ${errors.minDiv ? "is-invalid" : ""}`}
+                      name="ministryId"
+                      value={formData.ministryId}
+                      onChange={handleInputChange}
+                      className={`form-select ${errors.ministryId ? "is-invalid" : ""}`}
                 >
-                  <option value="">-- Select Ministry / Division --</option>
-                  {ministries.map((m) => (
-                    <option key={m.id || m.minName} value={m.minName}>
-                      {m.minName}
-                    </option>
-                  ))}
+                 <option value="">-- Select Ministry --</option>
+
+                    {ministries.map((m) => (
+                        <option key={m.id} value={m.id}>
+                            {m.minName}
+                        </option>
+                    ))}
                 </select>
-                {errors.minDiv && <div className="invalid-feedback">{errors.minDiv}</div>}
+                {errors.ministryId && (
+                    <div className="invalid-feedback">
+                        {errors.ministryId}
+                    </div>
+                )}
               </div>
 
               <div className="col-md-4">
@@ -476,7 +506,7 @@ function Users() {
             {/* Form Actions */}
             <div className="d-flex justify-content-end align-items-center gap-2 pt-3 border-top mt-3">
               {isEditing && (
-                <span className="badge bg-warning text-dark me-auto fs-6">
+                <span className="bg-warning text-dark me-auto fs-6">
                   Editing Record
                 </span>
               )}
@@ -591,8 +621,8 @@ function Users() {
                               <span>{user.officeName || "N/A"}</span>
                             </div>
                             <small className="text-muted d-flex align-items-center gap-1 mt-1">
-                              <Building2 size={12} className="flex-shrink-0" />
-                              <span>{user.minDiv}</span>
+                                <Building2 size={12} className="flex-shrink-0" />
+                                <span>{user.ministryName|| "N/A"}</span>
                             </small>
                           </td>
 
@@ -766,7 +796,7 @@ function Users() {
                     <label className="text-muted small d-block mb-1">
                       <Building2 size={12} className="me-1" /> Ministry / Division
                     </label>
-                    <p className="fw-semibold text-dark mb-0">{viewItem.minDiv}</p>
+                    <p className="fw-semibold text-dark mb-0">{viewItem.ministryName}</p>
                   </div>
 
                   <div className="col-md-6">
@@ -888,7 +918,7 @@ function Users() {
                   <td>
                     {item.officeName || "N/A"}
                     <br />
-                    <span>{item.minDiv}</span>
+                    <span>{item.ministryName}</span>
                   </td>
                   <td>{getRoleName(item.roleId, item.roleName)}</td>
                   <td>{activeStatus ? "Active" : "Inactive"}</td>
