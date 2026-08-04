@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/useAuth"
 import "./Sidebar.css";
 import {
   FaBars,
   FaHome,
   FaFolder,
-  FaTasks,
   FaChartBar,
   FaMoneyBillWave,
   FaUsers,
@@ -54,7 +54,6 @@ const menus = [
       { name: "Location", icon: <FaMapMarkedAlt />, path: "/projects/location" }
     ]
   },
-
   {
     name: "Reports",
     icon: <FaChartBar />,
@@ -101,10 +100,11 @@ const menus = [
 
 function Sidebar({ open, setSidebarOpen }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth(); // Auth context logout function
   const [openGroups, setOpenGroups] = useState({});
 
-  // Auto-expand whichever group contains the current route, so a page
-  // refresh or direct link lands with the right submenu already open.
+  // Auto-expand whichever group contains the current route
   useEffect(() => {
     const active = menus.find(
       (m) => m.children && m.children.some((c) => location.pathname.startsWith(c.path))
@@ -115,8 +115,6 @@ function Sidebar({ open, setSidebarOpen }) {
   }, [location.pathname]);
 
   const toggleGroup = (name) => {
-    // If the sidebar is collapsed, expand it first so the submenu is
-    // actually visible, then open the group.
     if (!open) {
       setSidebarOpen(true);
       setOpenGroups((prev) => ({ ...prev, [name]: true }));
@@ -127,6 +125,12 @@ function Sidebar({ open, setSidebarOpen }) {
 
   const isGroupActive = (item) =>
     item.children?.some((c) => location.pathname.startsWith(c.path));
+
+  // Handle Logout Click
+  const handleLogout = () => {
+    logout(); // Clears user token and local storage state
+    navigate("/login"); // Redirects to login page
+  };
 
   return (
     <aside className={`sidebar ${open ? "" : "mini"}`}>
@@ -203,7 +207,7 @@ function Sidebar({ open, setSidebarOpen }) {
       </div>
 
       <div className="bottom">
-        <button className="logout-btn">
+        <button type="button" className="logout-btn" onClick={handleLogout}>
           <FaSignOutAlt />
           {open && <span>Logout</span>}
         </button>

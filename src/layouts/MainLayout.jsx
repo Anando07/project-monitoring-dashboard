@@ -1,51 +1,44 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Outlet } from "react-router-dom";
+import { useAuth } from "../context/useAuth"
+
 
 import Sidebar from "../components/Sidebar/Sidebar";
 import Header from "../components/Header/Header";
 
 import "./MainLayout.css";
 
-function MainLayout() {
+export default function MainLayout() {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { isAuthenticated } = useAuth();
 
-    const [sidebarOpen, setSidebarOpen] = useState(true);
+  return (
+    <div className="layout-root">
+      {/* Sidebar renders ONLY when authenticated */}
+      {isAuthenticated && (
+        <Sidebar open={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+      )}
 
-    return (
+      {/* Main Container dynamically offsets when sidebar is open/collapsed */}
+      <div
+        className={`page-wrapper ${
+          !isAuthenticated
+            ? "public-mode"
+            : sidebarOpen
+            ? "sidebar-open"
+            : "sidebar-collapsed"
+        }`}
+      >
+        <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
-        <div className="layout">
+        <main className="main-content">
+          <Outlet />
+        </main>
 
-            {/* Sidebar */}
-            <Sidebar
-                open={sidebarOpen}
-                setSidebarOpen={setSidebarOpen}
-            />
-
-            {/* Page */}
-            <div
-                className={
-                    sidebarOpen
-                        ? "page-wrapper"
-                        : "page-wrapper expanded"
-                }
-            >
-
-                {/* Header */}
-                <Header
-                    sidebarOpen={sidebarOpen}
-                    setSidebarOpen={setSidebarOpen}
-                />
-
-                {/* Main Content */}
-                <main className="main-content">
-                    <Outlet />
-                </main>
-
-            </div>
-
-        </div>
-
-    );
-
+        <footer className="portal-footer">
+          &copy; {new Date().getFullYear()} National Project Management Portal. All rights reserved.
+        </footer>
+      </div>
+    </div>
+  );
 }
-
-export default MainLayout;

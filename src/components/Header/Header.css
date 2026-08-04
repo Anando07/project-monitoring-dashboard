@@ -1,379 +1,217 @@
-/* ===========================
-HEADER
-=========================== */
-
-.header{
-
-    position:fixed;
-
-    top:0;
-
-    left:270px;
-
-    width:calc(100% - 270px);
-
-    height:80px;
-
-    background:#fff;
-
-    display:flex;
-
-    justify-content:space-between;
-
-    align-items:center;
-
-    padding:0 25px;
-
-    border-bottom:1px solid #e5e7eb;
-
-    box-shadow:0 2px 12px rgba(0,0,0,.05);
-
-    transition:.3s;
-
-    z-index:999;
-
+/* ==========================================
+   1. DASHBOARD HEADER (AUTHENTICATED FIXED)
+   ========================================== */
+.dash-header {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 70px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  z-index: 999; /* Below sidebar overlay (1000) */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
+  transition: left 0.25s ease-in-out;
 }
 
-/* Sidebar Mini */
-
-.header.full{
-
-    left:80px;
-
-    width:calc(100% - 80px);
-
+.dash-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
 }
 
-/* ===========================
-LEFT
-=========================== */
-
-.header-left{
-
-    display:flex;
-
-    align-items:center;
-
-    gap:18px;
-
+.mobile-menu-btn {
+  background: #f1f5f9;
+  border: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #334155;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
 }
 
-.mobile-menu{
-
-    display:none;
-
-    width:45px;
-
-    height:45px;
-
-    border:none;
-
-    background:#2563eb;
-
-    color:#fff;
-
-    border-radius:10px;
-
-    cursor:pointer;
-
-    font-size:18px;
-
+.mobile-menu-btn:hover {
+  background: #e2e8f0;
 }
 
-.title h2{
-
-    margin:0;
-
-    font-size:24px;
-
-    color:#111827;
-
+.dash-title {
+  min-width: 0;
 }
 
-.title p{
-
-    margin-top:4px;
-
-    color:#6b7280;
-
-    font-size:13px;
-
+.dash-title h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* ===========================
-RIGHT
-=========================== */
-
-.header-right{
-
-    display:flex;
-
-    align-items:center;
-
-    gap:15px;
-
+.dash-title p {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Search */
-
-.search-box{
-
-    width:320px;
-
-    height:46px;
-
-    background:#f3f4f6;
-
-    border-radius:12px;
-
-    display:flex;
-
-    align-items:center;
-
-    padding:0 15px;
-
+.dash-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
-.search-icon{
-
-    color:#94a3b8;
-
+/* Search Box */
+.search-box {
+  position: relative;
+  width: 220px;
 }
 
-.search-box input{
-
-    width:100%;
-
-    border:none;
-
-    outline:none;
-
-    background:none;
-
-    margin-left:10px;
-
-    font-size:14px;
-
+.search-box input {
+  width: 100%;
+  padding: 8px 12px 8px 36px;
+  font-size: 0.85rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  outline: none;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
 }
 
-/* Icons */
-
-.icon-btn{
-
-    width:45px;
-
-    height:45px;
-
-    border:none;
-
-    border-radius:50%;
-
-    background:#f3f4f6;
-
-    display:flex;
-
-    justify-content:center;
-
-    align-items:center;
-
-    cursor:pointer;
-
-    position:relative;
-
-    transition:.3s;
-
-    font-size:17px;
-
+.search-box input:focus {
+  border-color: #0284c7;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.1);
 }
 
-.icon-btn:hover{
-
-    background:#e2e8f0;
-
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  font-size: 0.85rem;
+  pointer-events: none;
 }
 
-/* Badge */
-
-.badge{
-
-    position:absolute;
-
-    top:-2px;
-
-    right:-2px;
-
-    width:18px;
-
-    height:18px;
-
-    border-radius:50%;
-
-    background:#ef4444;
-
-    color:#fff;
-
-    font-size:10px;
-
-    display:flex;
-
-    justify-content:center;
-
-    align-items:center;
-
+/* Header Buttons */
+.icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s ease;
 }
 
-/* Profile */
-
-.profile{
-
-    display:flex;
-
-    align-items:center;
-
-    gap:12px;
-
-    cursor:pointer;
-
+.icon-btn:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
 }
 
-.profile img{
-
-    width:45px;
-
-    height:45px;
-
-    border-radius:50%;
-
-    border:2px solid #2563eb;
-
+.icon-btn .badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+  line-height: 1;
 }
 
-.profile h4{
-
-    margin:0;
-
-    font-size:15px;
-
-    color:#111827;
-
+/* Profile Section */
+.profile-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 12px;
+  border-left: 1px solid #e2e8f0;
+  cursor: pointer;
 }
 
-.profile small{
-
-    color:#6b7280;
-
+.profile-card img {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid #e2e8f0;
 }
 
-/* ===========================
-LAPTOP
-=========================== */
-
-@media(max-width:992px){
-
-.header{
-
-left:240px;
-
-width:calc(100% - 240px);
-
+.profile-info h4 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
 }
 
-.header.full{
-
-left:70px;
-
-width:calc(100% - 70px);
-
+.profile-info small {
+  font-size: 0.72rem;
+  color: #64748b;
+  display: block;
 }
 
-.search-box{
-
-width:220px;
-
+/* ==========================================
+   2. PUBLIC HEADER (UNAUTHENTICATED FIXED)
+   ========================================== */
+.public-header-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  width: 100%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.profile div{
-
-display:none;
-
+.national-banner {
+  background: #0f172a;
+  color: #ffffff;
+  padding: 6px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.72rem;
 }
 
+.bn-title {
+  font-weight: 500;
+  color: #38bdf8;
 }
 
-/* ===========================
-MOBILE
-=========================== */
-
-@media(max-width:768px){
-
-.header{
-
-left:0;
-
-width:100%;
-
-padding:0 15px;
-
-}
-
-.header.full{
-
-left:0;
-
-width:100%;
-
-}
-
-.mobile-menu{
-
-display:flex;
-
-justify-content:center;
-
-align-items:center;
-
-}
-
-.title h2{
-
-font-size:18px;
-
-}
-
-.title p{
-
-display:none;
-
-}
-
-.search-box{
-
-display:none;
-
-}
-
-.icon-btn:nth-child(1),
-
-.icon-btn:nth-child(2),
-
-.icon-btn:nth-child(3){
-
-display:none;
-
-}
-
-.profile div{
-
-display:none;
-
-}
-
-.profile img{
-
-width:40px;
-
-height:40px;
-
-}
-
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .dash-header {
+    padding: 0 16px;
+    left: 0 !important; /* Always full-bleed on mobile screens */
+  }
+  
+  .search-box, 
+  .profile-info {
+    display: none;
+  }
 }

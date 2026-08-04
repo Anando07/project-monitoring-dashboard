@@ -1,156 +1,111 @@
-/* ===========================
-GLOBAL
-=========================== */
-
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
+/* ==========================================
+   GLOBAL LAYOUT CONTAINER
+   ========================================== */
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100vh;
 }
 
-html,
-body,
-#root{
-    width:100%;
-    height:100%;
-    font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;
-    background:#f4f7fb;
-    overflow:hidden;
+.layout-root {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+  background-color: #f8fafc;
+  overflow-x: clip; /* Replaces hidden to preserve fixed positioning safely */
 }
 
-/* ===========================
-LAYOUT
-=========================== */
-
-.layout{
-    display:flex;
-    width:100%;
-    height:100vh;
+/* ==========================================
+   PAGE WRAPPER & DYNAMIC OFFSETS
+   ========================================== */
+.page-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 100vh;
+  width: 100%;
+  margin: 0 !important;
+  transition: padding-left 0.25s ease-in-out;
 }
 
-/* ===========================
-PAGE WRAPPER
-=========================== */
-
-.page-wrapper{
-
-    margin-left:270px;
-
-    width:calc(100% - 270px);
-
-    height:100vh;
-
-    display:flex;
-
-    flex-direction:column;
-
-    transition:all .3s ease;
-
+/* Authenticated Mode: Offset content below fixed 70px header */
+.page-wrapper.sidebar-open,
+.page-wrapper.sidebar-collapsed {
+  padding-top: 70px !important;
 }
 
-/* Sidebar Mini */
-
-.page-wrapper.expanded{
-
-    margin-left:80px;
-
-    width:calc(100% - 80px);
-
+/* Dynamic Left Padding for Sidebar */
+.page-wrapper.sidebar-open {
+  padding-left: 270px !important;
 }
 
-/* ===========================
-BODY
-=========================== */
-
-.main-content{
-
-    flex:1;
-
-    margin-top:80px;
-
-    overflow-y:auto;
-
-    overflow-x:visible;
-
-    padding:25px;
-
-    background:#f4f7fb;
-    overscroll-behavior: contain;
-
+.page-wrapper.sidebar-collapsed {
+  padding-left: 80px !important;
 }
 
-/* Scrollbar */
-
-.main-content::-webkit-scrollbar{
-
-    width:8px;
-
+/* Dynamic Header Alignment based on Sidebar state */
+.page-wrapper.sidebar-open .dash-header {
+  left: 270px;
 }
 
-.main-content::-webkit-scrollbar-thumb{
-
-    background:#cbd5e1;
-
-    border-radius:10px;
-
+.page-wrapper.sidebar-collapsed .dash-header {
+  left: 80px;
 }
 
-.main-content::-webkit-scrollbar-track{
-
-    background:transparent;
-
+/* Public Mode (Unauthenticated) */
+.page-wrapper.public-mode {
+  padding-left: 0 !important;
+  padding-top: 90px !important; /* Banner + Navbar total height offset */
 }
 
-/* ===========================
-TABLET
-=========================== */
-
-@media(max-width:992px){
-
-.page-wrapper{
-
-margin-left:240px;
-
-width:calc(100% - 240px);
-
+.page-wrapper.public-mode .dash-header,
+.page-wrapper.public-mode .public-header-wrapper {
+  left: 0;
 }
 
-.page-wrapper.expanded{
-
-margin-left:70px;
-
-width:calc(100% - 70px);
-
+/* ==========================================
+   MAIN CONTENT AREA
+   ========================================== */
+.main-content {
+  flex: 1;
+  width: 100%;
+  padding: 24px;
+  box-sizing: border-box;
 }
 
+/* Full Width for Public Landing Page */
+.page-wrapper.public-mode .main-content {
+  padding: 0;
 }
 
-/* ===========================
-MOBILE
-=========================== */
-
-@media(max-width:768px){
-
-.page-wrapper{
-
-margin-left:0;
-
-width:100%;
-
+/* ==========================================
+   FOOTER
+   ========================================== */
+.portal-footer {
+  width: 100%;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  padding: 14px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-top: auto;
+  box-sizing: border-box;
 }
 
-.page-wrapper.expanded{
+/* ==========================================
+   RESPONSIVE / MOBILE SCREENS
+   ========================================== */
+@media (max-width: 768px) {
+  .page-wrapper.sidebar-open,
+  .page-wrapper.sidebar-collapsed {
+    padding-left: 0 !important;
+  }
 
-margin-left:0;
-
-width:100%;
-
-}
-
-.main-content{
-
-padding:15px;
-
-}
-
+  .page-wrapper.sidebar-open .dash-header,
+  .page-wrapper.sidebar-collapsed .dash-header {
+    left: 0 !important;
+  }
 }
