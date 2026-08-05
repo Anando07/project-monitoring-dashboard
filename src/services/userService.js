@@ -13,15 +13,15 @@ export const getUserById = (id) =>
     api.get(`/users/${id}`);
 
 // Create user
-export const createUserApi = (user) =>
+export const createUser = (user) =>
     api.post("/users", user);
 
 // Update user
-export const updateUserApi = (id, user) =>
+export const updateUser = (id, user) =>
     api.put(`/users/${id}`, user);
 
 // Delete user
-export const deleteUserApi = (id) =>
+export const deleteUser = (id) =>
     api.delete(`/users/${id}`);
 
 

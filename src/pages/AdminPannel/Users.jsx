@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
   getAllUsers,
-  createUserApi,
-  updateUserApi,
-  deleteUserApi,
+  createUser,
+  updateUser,
+  deleteUser,
   getAllRoles,
   getAllMinistries
 } from "../../services/UserService";
@@ -210,7 +210,7 @@ function Users() {
     if (!validateForm()) return;
 
     if (isEditing) {
-      updateUserApi(formData.id, formData)
+      updateUser(formData.id, formData)
         .then(() => {
           fetchUsers();
           handleReset();
@@ -220,7 +220,7 @@ function Users() {
           alert("Failed to update user. Check backend server.");
         });
     } else {
-      createUserApi(formData)
+      createUser(formData)
         .then(() => {
           fetchUsers();
           handleReset();
@@ -252,7 +252,7 @@ function Users() {
 
   const handleDelete = (id) => {
     if (window.confirm("Are you sure you want to remove this user account?")) {
-      deleteUserApi(id)
+      deleteUser(id)
         .then(() => {
           fetchUsers();
           if (formData.id === id) handleReset();

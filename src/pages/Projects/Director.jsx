@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from "react";
-import "./Director.css";
 import {
   Plus,
   Trash2,
@@ -9,53 +8,25 @@ import {
   UserCheck,
   Search,
   Printer,
-  Filter,
   ChevronLeft,
   ChevronRight,
   User,
-  Building,
-  Mail,
-  Phone,
-  Briefcase,
-  FolderKanban,
-  Clock,
-  Upload,
-  FileText,
-  ExternalLink,
+  AlertCircle,
+  Loader,
 } from "lucide-react";
 
-/* ------------------------------------------------------------------ */
-/* Card Component                                                    */
-/* ------------------------------------------------------------------ */
-
-function Card({ title, action, children, className = "" }) {
-  return (
-    <div className={`dashboard-card ${className}`}>
-      {(title || action) && (
-        <div className="dashboard-card-header">
-          <h3>{title}</h3>
-          {action && <div className="card-action">{action}</div>}
-        </div>
-      )}
-      {children}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Options & Initial Data                                            */
-/* ------------------------------------------------------------------ */
+// Services (adjust import paths to match your project structure)
+import {
+    getAllDirectors,
+    createDirector,
+    updateDirector,
+    deleteDirector
+} from "../../services/DirectorService";
+import { getAllMinistries } from "../../services/MinistryService";
+import { getAllDirectorates } from "../../services/DirectorateService";
+import { getAllProjects } from "../../services/ProjectService";
 
 const PAGE_SIZE = 8;
-
-const PROJECT_OPTIONS = [
-  "Dhaka Metro Rail (MRT Line-6)",
-  "Dhaka Elevated Expressway",
-  "Padma Bridge Rail Link",
-  "Bangabandhu Tunnel (Karnafuli)",
-  "Dhaka-Chittagong Highway Expansion",
-  "Smart National Fuel Management System",
-];
 
 const DUTY_ROLES = [
   "On Duty",
@@ -65,75 +36,30 @@ const DUTY_ROLES = [
   "Transferred",
 ];
 
-const INITIAL_DIRECTORS = [
-  {
-    id: 1,
-    name: "Engr. Md. Abul Kalam",
-    designation: "Project Director",
-    office: "Dhaka Transport Coordination Authority (DTCA)",
-    contact: "+880 1711-000001",
-    email: "pd.mrt@dtca.gov.bd",
-    projectName: "Dhaka Metro Rail (MRT Line-6)",
-    dutyRole: "On Duty",
-    assignedDate: "2023-01-15",
-    releaseDate: "",
-    dutyGoName: "GO-MRT-2023-01.pdf",
-    dutyGoUrl: "#",
-    image: null,
-    status: "Active",
-  },
-  {
-    id: 2,
-    name: "Engr. Md. Abul Kalam",
-    designation: "Project Director",
-    office: "Dhaka Transport Coordination Authority (DTCA)",
-    contact: "+880 1711-000001",
-    email: "pd.mrt@dtca.gov.bd",
-    projectName: "Dhaka Elevated Expressway",
-    dutyRole: "Additional Duty",
-    assignedDate: "2023-06-01",
-    releaseDate: "",
-    dutyGoName: "GO-DEE-2023-45.pdf",
-    dutyGoUrl: "#",
-    image: null,
-    status: "Active",
-  },
-  {
-    id: 3,
-    name: "Dr. Sharmin Akter",
-    designation: "Additional Project Director",
-    office: "Roads and Highways Department (RHD)",
-    contact: "+880 1819-000002",
-    email: "s.akter@rhd.gov.bd",
-    projectName: "Smart National Fuel Management System",
-    dutyRole: "Current Duty",
-    assignedDate: "2024-02-01",
-    releaseDate: "",
-    dutyGoName: "GO-RHD-2024-09.pdf",
-    dutyGoUrl: "#",
-    image: null,
-    status: "Active",
-  },
-];
-
 const EMPTY_FORM = {
   name: "",
   designation: "",
-  office: "",
+  ministryId: "",
+  directorateId: "",
   contact: "",
   email: "",
-  projectName: "",
+  projectId: "",
   dutyRole: "On Duty",
   assignedDate: new Date().toISOString().split("T")[0],
   releaseDate: "",
-  dutyGoName: "",
-  dutyGoUrl: null,
   image: null,
-  status: "Active",
 };
 
 function Director() {
-  const [directors, setDirectors] = useState(INITIAL_DIRECTORS);
+  // Database State
+  const [ministries, setMinistries] = useState([]);
+  const [directorates, setDirectorates] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [directors, setDirectors] = useState([]);
+
+  // UI State
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState({});
   const [editingId, setEditingId] = useState(null);
@@ -141,11 +67,58 @@ function Director() {
 
   /* Search & Filter States */
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
   const [dutyFilter, setDutyFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
 
-  /* Field Change Handler */
+  // Fetch initial relational data from backend REST APIs
+  useEffect(() => {
+    fetchInitialData();
+  }, []);
+
+  const fetchInitialData = async () => {
+    setLoading(true);
+    setApiError(null);
+    try {
+      const [minRes, dirRes, projRes, directorRes] =
+        await Promise.all([
+            getAllMinistries(),
+            getAllDirectorates(),
+            getAllProjects(),
+            getAllDirectors()
+        ]);
+
+        setMinistries(minRes.data);
+        setDirectorates(dirRes.data);
+        setProjects(projRes.data);
+        setDirectors(directorRes.data);
+    } catch (error) {
+      console.error("Failed to fetch initial data:", error);
+      setApiError("Unable to load ministries, directorates, or projects from server.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* Filter Directorates dynamically based on selected Ministry */
+  const availableDirectorates = useMemo(() => {
+    if (!form.ministryId) return [];
+    return directorates.filter(
+      (d) => String(d.ministry?.id || d.ministryId) === String(form.ministryId)
+    );
+  }, [directorates, form.ministryId]);
+
+  /* Handle Ministry Selection Changes */
+  const handleMinistryChange = (e) => {
+    const selectedMinId = e.target.value;
+    setForm((prev) => ({
+      ...prev,
+      ministryId: selectedMinId,
+      directorateId: "", // Reset directorate when ministry changes
+    }));
+    if (errors.ministryId) setErrors((prev) => ({ ...prev, ministryId: null }));
+  };
+
+  /* Generic Field Change Handler */
   const handleChange = (field) => (e) => {
     const value = e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -164,35 +137,16 @@ function Director() {
     }
   };
 
-  /* Duty GO Document Handler */
-  const handleGoUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setForm((prev) => ({
-          ...prev,
-          dutyGoName: file.name,
-          dutyGoUrl: reader.result,
-        }));
-        if (errors.dutyGo) setErrors((prev) => ({ ...prev, dutyGo: null }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   /* Form Validation */
   const validate = () => {
     const nextErrors = {};
-    // Mandatory fields check
     if (!form.name.trim()) nextErrors.name = "Full name is required";
     if (!form.designation.trim()) nextErrors.designation = "Designation is required";
-    if (!form.office.trim()) nextErrors.office = "Office/Department is required";
+    if (!form.ministryId) nextErrors.ministryId = "Please select a Ministry";
     if (!form.contact.trim()) nextErrors.contact = "Contact number is required";
-    if (!form.projectName) nextErrors.projectName = "Please select a project";
+    if (!form.projectId) nextErrors.projectId = "Please select a Project";
     if (!form.dutyRole) nextErrors.dutyRole = "Duty Role is required";
     if (!form.assignedDate) nextErrors.assignedDate = "Assigned Date is required";
-    if (!form.dutyGoName) nextErrors.dutyGo = "Duty GO file is required";
 
     if (!form.email.trim()) {
       nextErrors.email = "Email address is required";
@@ -200,16 +154,15 @@ function Director() {
       nextErrors.email = "Please enter a valid email address";
     }
 
-    // Duplicate project check per director
     const isDuplicateProject = directors.some(
       (d) =>
         d.id !== editingId &&
-        d.name.trim().toLowerCase() === form.name.trim().toLowerCase() &&
-        d.projectName === form.projectName
+        d.dirName.trim().toLowerCase() === form.name.trim().toLowerCase() &&
+        String(d.projectId) === String(form.projectId)
     );
 
     if (isDuplicateProject) {
-      nextErrors.projectName = "Director is already assigned to this project";
+      nextErrors.projectId = "Director is already assigned to this project";
     }
 
     setErrors(nextErrors);
@@ -217,26 +170,64 @@ function Director() {
   };
 
   /* Form Submission */
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!validate()) return;
+  const handleSubmit = async (e) => {
 
-    if (editingId) {
-      setDirectors((prev) =>
-        prev.map((d) => (d.id === editingId ? { ...d, ...form } : d))
-      );
-    } else {
-      const newEntry = {
-        id: Date.now(),
-        ...form,
+      e.preventDefault();
+
+      if (!validate()) return;
+
+      const payload = {
+
+          dirName: form.name,
+
+          dirDesignation: form.designation,
+
+          ministryId: Number(form.ministryId),
+
+          directorateId: form.directorateId
+              ? Number(form.directorateId)
+              : null,
+
+          contact: form.contact,
+
+          email: form.email,
+
+          projectId: Number(form.projectId),
+
+          dutyRole: form.dutyRole,
+
+          assignedDate: form.assignedDate,
+
+          releaseDate: form.releaseDate || null,
+
+          image: form.image
       };
-      setDirectors((prev) => [newEntry, ...prev]);
-      setCurrentPage(1);
-    }
 
-    handleReset();
+      try {
+
+          if (editingId) {
+
+              await updateDirector(editingId, payload);
+
+          } else {
+
+              await createDirector(payload);
+
+          }
+
+          fetchInitialData();
+
+          handleReset();
+
+      } catch (error) {
+
+          console.log(error);
+
+          alert("Save Failed");
+
+      }
+
   };
-
   const handleReset = () => {
     setForm(EMPTY_FORM);
     setErrors({});
@@ -244,16 +235,41 @@ function Director() {
   };
 
   const handleEdit = (director) => {
-    setForm({ ...director });
+    setForm({
+      name: director.dirName || "",
+      designation: director.dirDesignation || "",
+      ministryId: String(director.ministryId || ""),
+      directorateId: String(director.directorateId || ""),
+      contact: director.contact || "",
+      email: director.email || "",
+      projectId: String(director.projectId || ""),
+      dutyRole: director.dutyRole || "On Duty",
+      assignedDate: director.assignedDate || "",
+      releaseDate: director.releaseDate || "",
+      image: director.image || null,
+    });
     setEditingId(director.id);
     setErrors({});
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleDelete = (id) => {
-    setDirectors((prev) => prev.filter((d) => d.id !== id));
-    if (editingId === id) handleReset();
-  };
+  const handleDelete = async (id) => {
+
+      if (!window.confirm("Delete?")) return;
+
+      try{
+
+          await deleteDirector(id);
+
+          fetchInitialData();
+
+      }catch(e){
+
+          alert("Delete Failed");
+
+      }
+
+  }
 
   const handlePrint = () => {
     window.print();
@@ -264,21 +280,18 @@ function Director() {
     return directors.filter((d) => {
       const query = searchTerm.toLowerCase().trim();
       const matchesSearch =
-        d.name.toLowerCase().includes(query) ||
-        d.designation.toLowerCase().includes(query) ||
-        d.office.toLowerCase().includes(query) ||
-        d.email.toLowerCase().includes(query) ||
-        d.projectName.toLowerCase().includes(query);
+        (d.dirName || "").toLowerCase().includes(query) ||
+        (d.dirDesignation || "").toLowerCase().includes(query) ||
+        (d.ministryName || "").toLowerCase().includes(query) ||
+        (d.directorateName || "").toLowerCase().includes(query) ||
+        (d.email || "").toLowerCase().includes(query) ||
+        (d.projectName || "").toLowerCase().includes(query);
 
-      const matchesStatus =
-        statusFilter === "All" || d.status === statusFilter;
+      const matchesDuty = dutyFilter === "All" || d.dutyRole === dutyFilter;
 
-      const matchesDuty =
-        dutyFilter === "All" || d.dutyRole === dutyFilter;
-
-      return matchesSearch && matchesStatus && matchesDuty;
+      return matchesSearch && matchesDuty;
     });
-  }, [directors, searchTerm, statusFilter, dutyFilter]);
+  }, [directors, searchTerm, dutyFilter]);
 
   /* Pagination */
   const totalPages = Math.max(1, Math.ceil(filteredDirectors.length / PAGE_SIZE));
@@ -293,290 +306,272 @@ function Director() {
   );
 
   return (
-    <div className="dashboard-page">
-      {/* ---------------- 3-Column Single Form ---------------- */}
-      <Card
-        className="no-print"
-        title={editingId ? "Edit Director Record" : "Add Director Record"}
-        action={<UserCheck size={18} className="card-action-icon" />}
-      >
-        <form className="project-form" onSubmit={handleSubmit} noValidate>
-          <div className="form-grid form-grid-3">
-            {/* Row 1 */}
-            <div className="form-group">
-              <label htmlFor="directorName">
-                Full Name <span className="req-star">*</span>
-              </label>
-              <input
-                id="directorName"
-                type="text"
-                placeholder="e.g. Engr. Md. Abul Kalam"
-                value={form.name}
-                onChange={handleChange("name")}
-                className={errors.name ? "input-error" : ""}
-              />
-              {errors.name && <span className="field-error">{errors.name}</span>}
-            </div>
+    <div className="container-fluid py-4 bg-light min-vh-100">
+      {/* ---------------- Form Card ---------------- */}
+      <div className="card shadow-sm border-0 mb-4 d-print-none">
+        <div className="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
+          <h5 className="mb-0 text-primary fw-bold">
+            {editingId ? "Edit Director Record" : "Add Director Record"}
+          </h5>
+          <UserCheck className="text-primary" size={20} />
+        </div>
 
-            <div className="form-group">
-              <label htmlFor="designation">
-                Designation <span className="req-star">*</span>
-              </label>
-              <input
-                id="designation"
-                type="text"
-                placeholder="e.g. Project Director"
-                value={form.designation}
-                onChange={handleChange("designation")}
-                className={errors.designation ? "input-error" : ""}
-              />
-              {errors.designation && (
-                <span className="field-error">{errors.designation}</span>
-              )}
+        <div className="card-body p-4">
+          {loading ? (
+            <div className="text-center py-4">
+              <Loader size={24} className="spinner-border text-primary border-0" />
+              <p className="mt-2 text-muted small">Loading Ministries & Directorates...</p>
             </div>
-
-            <div className="form-group">
-              <label htmlFor="office">
-                Office / Department <span className="req-star">*</span>
-              </label>
-              <input
-                id="office"
-                type="text"
-                placeholder="e.g. DTCA, Ministry of Transport"
-                value={form.office}
-                onChange={handleChange("office")}
-                className={errors.office ? "input-error" : ""}
-              />
-              {errors.office && <span className="field-error">{errors.office}</span>}
+          ) : apiError ? (
+            <div className="alert alert-danger d-flex align-items-center gap-2 py-2 px-3">
+              <AlertCircle size={16} />
+              <span className="small">{apiError}</span>
             </div>
+          ) : (
+            <form onSubmit={handleSubmit} noValidate>
+              <div className="row g-3">
+                {/* Full Name */}
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">
+                    Full Name <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Engr. Md. Abul Kalam"
+                    value={form.name}
+                    onChange={handleChange("name")}
+                    className={`form-control ${errors.name ? "is-invalid" : ""}`}
+                  />
+                  {errors.name && <div className="invalid-feedback">{errors.name}</div>}
+                </div>
 
-            {/* Row 2 */}
-            <div className="form-group">
-              <label htmlFor="contact">
-                Contact Number <span className="req-star">*</span>
-              </label>
-              <input
-                id="contact"
-                type="text"
-                placeholder="e.g. +880 1711-000000"
-                value={form.contact}
-                onChange={handleChange("contact")}
-                className={errors.contact ? "input-error" : ""}
-              />
-              {errors.contact && (
-                <span className="field-error">{errors.contact}</span>
-              )}
-            </div>
+                {/* Designation */}
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">
+                    Designation <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Project Director"
+                    value={form.designation}
+                    onChange={handleChange("designation")}
+                    className={`form-control ${errors.designation ? "is-invalid" : ""}`}
+                  />
+                  {errors.designation && <div className="invalid-feedback">{errors.designation}</div>}
+                </div>
 
-            <div className="form-group">
-              <label htmlFor="email">
-                Email Address <span className="req-star">*</span>
-              </label>
-              <input
-                id="email"
-                type="email"
-                placeholder="e.g. director@agency.gov.bd"
-                value={form.email}
-                onChange={handleChange("email")}
-                className={errors.email ? "input-error" : ""}
-              />
-              {errors.email && <span className="field-error">{errors.email}</span>}
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="projectName">
-                Project Name <span className="req-star">*</span>
-              </label>
-              <select
-                id="projectName"
-                value={form.projectName}
-                onChange={handleChange("projectName")}
-                className={errors.projectName ? "input-error" : ""}
-              >
-                <option value="">-- Choose Project --</option>
-                {PROJECT_OPTIONS.map((proj, idx) => (
-                  <option key={idx} value={proj}>
-                    {proj}
-                  </option>
-                ))}
-              </select>
-              {errors.projectName && (
-                <span className="field-error">{errors.projectName}</span>
-              )}
-            </div>
-
-            {/* Row 3 */}
-            <div className="form-group">
-              <label htmlFor="dutyRole">
-                Duty Role <span className="req-star">*</span>
-              </label>
-              <select
-                id="dutyRole"
-                value={form.dutyRole}
-                onChange={handleChange("dutyRole")}
-              >
-                {DUTY_ROLES.map((role) => (
-                  <option key={role} value={role}>
-                    {role}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="assignedDate">
-                Assigned Date <span className="req-star">*</span>
-              </label>
-              <input
-                id="assignedDate"
-                type="date"
-                value={form.assignedDate}
-                onChange={handleChange("assignedDate")}
-                className={errors.assignedDate ? "input-error" : ""}
-              />
-              {errors.assignedDate && (
-                <span className="field-error">{errors.assignedDate}</span>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="releaseDate">
-                Release Date <span className="optional-tag">(Optional)</span>
-              </label>
-              <input
-                id="releaseDate"
-                type="date"
-                value={form.releaseDate}
-                onChange={handleChange("releaseDate")}
-              />
-            </div>
-
-            {/* Row 4 (Last Row) */}
-            <div className="form-group">
-              <label htmlFor="status">
-                Account Status <span className="req-star">*</span>
-              </label>
-              <select
-                id="status"
-                value={form.status}
-                onChange={handleChange("status")}
-              >
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-            </div>
-
-            {/* LAST CELL 2: Duty GO Document Upload (Mandatory) */}
-            <div className="form-group">
-              <label htmlFor="dutyGoInput">
-                Duty GO Document <span className="req-star">*</span>
-              </label>
-              <div className="file-upload-box">
-                {form.dutyGoName ? (
-                  <div className="uploaded-file-tag">
-                    <FileText size={14} />
-                    <span className="file-name-text" title={form.dutyGoName}>
-                      {form.dutyGoName}
-                    </span>
-                    <button
-                      type="button"
-                      className="remove-file-btn"
-                      onClick={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          dutyGoName: "",
-                          dutyGoUrl: null,
-                        }))
-                      }
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ) : (
-                  <label
-                    htmlFor="dutyGoInput"
-                    className={`file-input-label ${errors.dutyGo ? "input-error" : ""}`}
+                {/* Dynamic Ministry Dropdown */}
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">
+                    Ministry <span className="text-danger">*</span>
+                  </label>
+                  <select
+                    value={form.ministryId}
+                    onChange={handleMinistryChange}
+                    className={`form-select ${errors.ministryId ? "is-invalid" : ""}`}
                   >
-                    <Upload size={14} /> Attach Duty GO
+                    <option value="">-- Select Ministry --</option>
+                    {ministries.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.minName}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.ministryId && <div className="invalid-feedback">{errors.ministryId}</div>}
+                </div>
+
+                {/* Dynamic Directorate Dropdown (Filtered by selected Ministry) */}
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">
+                    Directorate <span className="text-muted fw-normal">(Optional)</span>
                   </label>
-                )}
-                <input
-                  id="dutyGoInput"
-                  type="file"
-                  accept=".pdf,.doc,.docx,image/*"
-                  onChange={handleGoUpload}
-                  className="file-input-hidden"
-                />
-              </div>
-              {errors.dutyGo && (
-                <span className="field-error">{errors.dutyGo}</span>
-              )}
-            </div>
+                  <select
+                    value={form.directorateId}
+                    onChange={handleChange("directorateId")}
+                    disabled={!form.ministryId}
+                    className="form-select"
+                  >
+                    <option value="">
+                      {!form.ministryId
+                        ? "-- Select Ministry First --"
+                        : "-- Select Directorate --"}
+                    </option>
+                    {availableDirectorates.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.dirName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-            {/* LAST CELL 3: Director Image Upload (Optional) */}
-            <div className="form-group">
-              <label htmlFor="directorImage">
-                Director Photo <span className="optional-tag">(Optional)</span>
-              </label>
-              <div className="image-upload-wrapper">
-                {form.image ? (
-                  <div className="image-preview-container">
-                    <img src={form.image} alt="Preview" className="image-preview" />
-                    <button
-                      type="button"
-                      className="image-remove-btn"
-                      onClick={() => setForm((prev) => ({ ...prev, image: null }))}
-                      title="Remove image"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ) : (
-                  <label htmlFor="directorImage" className="file-input-label">
-                    <Upload size={14} /> Upload Photo
+                {/* Contact Number */}
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">
+                    Contact Number <span className="text-danger">*</span>
                   </label>
-                )}
-                <input
-                  id="directorImage"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  className="file-input-hidden"
-                />
+                  <input
+                    type="text"
+                    placeholder="e.g. +880 1711-000000"
+                    value={form.contact}
+                    onChange={handleChange("contact")}
+                    className={`form-control ${errors.contact ? "is-invalid" : ""}`}
+                  />
+                  {errors.contact && <div className="invalid-feedback">{errors.contact}</div>}
+                </div>
+
+                {/* Email Address */}
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">
+                    Email Address <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="e.g. director@agency.gov.bd"
+                    value={form.email}
+                    onChange={handleChange("email")}
+                    className={`form-control ${errors.email ? "is-invalid" : ""}`}
+                  />
+                  {errors.email && <div className="invalid-feedback">{errors.email}</div>}
+                </div>
+
+                {/* Dynamic Project Dropdown */}
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">
+                    Project Name <span className="text-danger">*</span>
+                  </label>
+                  <select
+                    value={form.projectId}
+                    onChange={handleChange("projectId")}
+                    className={`form-select ${errors.projectId ? "is-invalid" : ""}`}
+                  >
+                    <option value="">-- Choose Project --</option>
+                    {projects.map((proj) => (
+                      <option key={proj.id} value={proj.id}>
+                        {proj.projectName}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.projectId && <div className="invalid-feedback">{errors.projectId}</div>}
+                </div>
+
+                {/* Duty Role */}
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">
+                    Duty Role <span className="text-danger">*</span>
+                  </label>
+                  <select
+                    value={form.dutyRole}
+                    onChange={handleChange("dutyRole")}
+                    className="form-select"
+                  >
+                    {DUTY_ROLES.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Assigned Date */}
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">
+                    Assigned Date <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={form.assignedDate}
+                    onChange={handleChange("assignedDate")}
+                    className={`form-control ${errors.assignedDate ? "is-invalid" : ""}`}
+                  />
+                  {errors.assignedDate && <div className="invalid-feedback">{errors.assignedDate}</div>}
+                </div>
+
+                {/* Release Date */}
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">
+                    Release Date <span className="text-muted fw-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={form.releaseDate}
+                    onChange={handleChange("releaseDate")}
+                    className="form-control"
+                  />
+                </div>
+
+                {/* Director Photo Upload */}
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">
+                    Director Photo <span className="text-muted fw-normal">(Optional)</span>
+                  </label>
+                  {form.image ? (
+                    <div className="d-flex align-items-center gap-2">
+                      <img
+                        src={form.image}
+                        alt="Preview"
+                        className="rounded border"
+                        style={{ width: "38px", height: "38px", objectFit: "cover" }}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-danger"
+                        onClick={() => setForm((prev) => ({ ...prev, image: null }))}
+                      >
+                        <X size={14} /> Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      className="form-control"
+                    />
+                  )}
+                </div>
+
+                {/* Form Action Buttons */}
+                <div className="col-12 d-flex justify-content-end align-items-center gap-2 mt-4 pt-2 border-top">
+                  {editingId && (
+                    <span className="badge bg-primary-subtle text-primary border me-auto p-2">
+                      Editing Record ID: #{editingId}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={handleReset}
+                  >
+                    {editingId ? "Cancel" : "Reset"}
+                  </button>
+                  <button type="submit" className="btn btn-primary d-inline-flex align-items-center gap-1">
+                    {editingId ? <Pencil size={16} /> : <Plus size={16} />}
+                    {editingId ? "Update Record" : "Save Record"}
+                  </button>
+                </div>
               </div>
-            </div>
-          </div>
+            </form>
+          )}
+        </div>
+      </div>
 
-          <div className="form-actions">
-            {editingId && (
-              <span className="editing-badge">Editing ID: #{editingId}</span>
-            )}
-            <button
-              type="button"
-              className="button-secondary"
-              onClick={handleReset}
-            >
-              {editingId ? "Cancel" : "Reset"}
-            </button>
-            <button type="submit" className="button-primary">
-              {editingId ? <Pencil size={16} /> : <Plus size={16} />}
-              {editingId ? "Update Record" : "Save Record"}
-            </button>
-          </div>
-        </form>
-      </Card>
+      {/* ---------------- Directory Table ---------------- */}
+      <div className="card shadow-sm border-0 d-print-none">
+        <div className="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">
+          <h5 className="mb-0 fw-bold text-dark">
+            Directors Directory <span className="badge bg-secondary ms-1">{filteredDirectors.length}</span>
+          </h5>
 
-      {/* ---------------- Table Display ---------------- */}
-      <Card
-        className="no-print"
-        title={`Directors Directory (${filteredDirectors.length})`}
-        action={
-          <div className="header-actions">
-            <div className="search-box">
-              <Search size={16} className="search-icon" />
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            {/* Search Input */}
+            <div className="input-group input-group-sm" style={{ width: "260px" }}>
+              <span className="input-group-text bg-light border-end-0">
+                <Search size={14} />
+              </span>
               <input
                 type="text"
-                placeholder="Search name, project, office..."
+                className="form-control bg-light border-start-0"
+                placeholder="Search director, ministry, project..."
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
@@ -585,233 +580,204 @@ function Director() {
               />
             </div>
 
-            <div className="filter-dropdown">
-              <Filter size={16} className="filter-icon" />
-              <select
-                value={dutyFilter}
-                onChange={(e) => {
-                  setDutyFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-              >
-                <option value="All">All Duty Roles</option>
-                {DUTY_ROLES.map((role) => (
-                  <option key={role} value={role}>
-                    {role}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="filter-dropdown">
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-              >
-                <option value="All">All Status</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-            </div>
+            {/* Duty Role Filter */}
+            <select
+              className="form-select form-select-sm"
+              style={{ width: "160px" }}
+              value={dutyFilter}
+              onChange={(e) => {
+                setDutyFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+            >
+              <option value="All">All Duty Roles</option>
+              {DUTY_ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
 
             <button
               type="button"
-              className="button-secondary print-btn"
+              className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
               onClick={handlePrint}
             >
-              <Printer size={16} />
-              Print
+              <Printer size={14} /> Print
             </button>
           </div>
-        }
-      >
-        {filteredDirectors.length === 0 ? (
-          <div className="empty-state">
-            <User size={28} />
-            <p>
-              {directors.length === 0
-                ? "No director records found. Add one above."
-                : "No records match your current filter."}
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="table-overflow">
-              <table className="projects-table">
-                <thead>
+        </div>
+
+        <div className="card-body p-0">
+          <div className="table-responsive">
+            {filteredDirectors.length === 0 ? (
+              <div className="text-center py-5 text-muted">
+                <User size={32} className="mb-2" />
+                <p className="mb-0">
+                  {directors.length === 0
+                    ? "No director records found. Add one above."
+                    : "No records match your filter."}
+                </p>
+              </div>
+            ) : (
+              <table className="table table-hover align-middle mb-0">
+                <thead className="table-dark">
                   <tr>
                     <th>Photo</th>
                     <th>Director Info</th>
-                    <th>Office & Contact</th>
+                    <th>Ministry &amp; Directorate</th>
+                    <th>Contact</th>
                     <th>Assigned Project</th>
                     <th>Duty Role</th>
-                    <th>Duty GO</th>
-                    <th>Account Status</th>
-                    <th>Action</th>
+                    <th className="text-end">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pageDirectors.map((item) => (
                     <tr key={item.id}>
                       <td>
-                        <div className="table-avatar">
-                          {item.image ? (
-                            <img src={item.image} alt={item.name} className="avatar-img" />
-                          ) : (
-                            <div className="avatar-placeholder">
-                              <User size={16} />
-                            </div>
-                          )}
-                        </div>
+                        {item.image ? (
+                          <img
+                            src={item.image}
+                            alt={item.dirName}
+                            className="rounded-circle border"
+                            style={{ width: "36px", height: "36px", objectFit: "cover" }}
+                          />
+                        ) : (
+                          <div
+                            className="rounded-circle bg-secondary-subtle text-secondary d-flex align-items-center justify-content-center"
+                            style={{ width: "36px", height: "36px" }}
+                          >
+                            <User size={18} />
+                          </div>
+                        )}
                       </td>
                       <td>
-                        <div className="director-name-cell">
-                          <strong>{item.name}</strong>
-                          <span className="sub-text">{item.designation}</span>
-                        </div>
+                        <strong className="d-block text-dark">{item.dirName}</strong>
+                        <small className="text-muted">{item.dirDesignation}</small>
                       </td>
                       <td>
-                        <div className="contact-cell">
-                          <span>{item.office}</span>
-                          <small>{item.contact}</small>
-                          <small>{item.email}</small>
-                        </div>
+                        <span className="d-block small fw-semibold text-dark">{item.ministryName}</span>
+                        <small className="text-muted d-block">{item.directorateName || "—"}</small>
                       </td>
                       <td>
-                        <span className="project-name-tag">
+                        <span className="d-block small">{item.contact}</span>
+                        <small className="text-muted d-block">{item.email}</small>
+                      </td>
+                      <td>
+                        <span className="badge bg-light text-dark border fw-normal p-2">
                           {item.projectName}
                         </span>
                       </td>
                       <td>
                         <span
-                          className={`duty-pill ${
-                            item.dutyRole === "On Duty" ||
-                            item.dutyRole === "Current Duty"
-                              ? "duty-pill-green"
+                          className={`badge ${
+                            item.dutyRole === "On Duty" || item.dutyRole === "Current Duty"
+                              ? "bg-success-subtle text-success border border-success-subtle"
                               : item.dutyRole === "Additional Duty"
-                              ? "duty-pill-blue"
-                              : "duty-pill-red"
+                              ? "bg-primary-subtle text-primary border border-primary-subtle"
+                              : "bg-danger-subtle text-danger border border-danger-subtle"
                           }`}
                         >
                           {item.dutyRole}
                         </span>
                       </td>
-                      <td>
-                        {item.dutyGoName ? (
-                          <a
-                            href={item.dutyGoUrl || "#"}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="go-file-badge"
-                            title={item.dutyGoName}
+                      <td className="text-end">
+                        <div className="btn-group btn-group-sm">
+                          <button
+                            onClick={() => setViewDirector(item)}
+                            className="btn btn-outline-secondary"
+                            title="View Profile"
                           >
-                            <FileText size={13} />
-                            <span>GO Doc</span>
-                          </a>
-                        ) : (
-                          <span className="sub-text">N/A</span>
-                        )}
-                      </td>
-                      <td>
-                        <span
-                          className={`status-pill ${
-                            item.status === "Active"
-                              ? "status-pill-green"
-                              : "status-pill-red"
-                          }`}
-                        >
-                          {item.status}
-                        </span>
-                      </td>
-                      <td className="table-action-cell">
-                        <button
-                          className="action-button"
-                          onClick={() => setViewDirector(item)}
-                          title="View Details"
-                        >
-                          <Eye size={16} />
-                        </button>
-                        <button
-                          className="action-button action-button-edit"
-                          onClick={() => handleEdit(item)}
-                          title="Edit Record"
-                        >
-                          <Pencil size={16} />
-                        </button>
-                        <button
-                          className="action-button action-button-danger"
-                          onClick={() => handleDelete(item.id)}
-                          title="Delete Record"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                            <Eye size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleEdit(item)}
+                            className="btn btn-outline-primary"
+                            title="Edit Record"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            className="btn btn-outline-danger"
+                            title="Delete Record"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
-
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="pagination">
-                <button
-                  type="button"
-                  className="pagination-btn"
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                <span className="pagination-info">
-                  Page {currentPage} of {totalPages}
-                </span>
-                <button
-                  type="button"
-                  className="pagination-btn"
-                  disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  <ChevronRight size={16} />
-                </button>
-              </div>
             )}
-          </>
-        )}
-      </Card>
+          </div>
 
-      {/* ---------------- Print Table View ---------------- */}
-      <div className="print-table-wrapper">
-        <h2 className="print-title">Directors Official Directory & Duty Roles</h2>
-        <p className="print-subtitle">
-          Generated on {new Date().toLocaleDateString("en-GB")} · Total Records:{" "}
-          {filteredDirectors.length}
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="d-flex justify-content-center py-3 border-top">
+              <nav>
+                <ul className="pagination pagination-sm mb-0">
+                  <li className={`page-item ${currentPage === 1 ? "disabled" : ""}`}>
+                    <button
+                      type="button"
+                      className="page-link"
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                  </li>
+                  <li className="page-item disabled">
+                    <span className="page-link text-dark">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                  </li>
+                  <li className={`page-item ${currentPage === totalPages ? "disabled" : ""}`}>
+                    <button
+                      type="button"
+                      className="page-link"
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ---------------- Print Mode Table ---------------- */}
+      <div className="d-none d-print-block">
+        <h3 className="fw-bold mb-1">Directors Official Directory</h3>
+        <p className="text-muted small mb-3">
+          Generated on {new Date().toLocaleDateString("en-GB")} · Total Records: {filteredDirectors.length}
         </p>
-        <table className="projects-table print-table">
+        <table className="table table-bordered table-sm">
           <thead>
             <tr>
-              <th>Name & Designation</th>
-              <th>Office</th>
+              <th>Name &amp; Designation</th>
+              <th>Ministry</th>
+              <th>Directorate</th>
               <th>Contact</th>
               <th>Assigned Project</th>
               <th>Duty Role</th>
               <th>Assigned Date</th>
               <th>Release Date</th>
-              <th>Duty GO</th>
             </tr>
           </thead>
           <tbody>
             {filteredDirectors.map((item) => (
               <tr key={item.id}>
                 <td>
-                  <strong>{item.name}</strong>
+                  <strong>{item.dirName}</strong>
                   <br />
-                  <small>{item.designation}</small>
+                  <small>{item.DirNesignation}</small>
                 </td>
-                <td>{item.office}</td>
+                <td>{item.ministryName}</td>
+                <td>{item.directorateName || "N/A"}</td>
                 <td>
                   {item.contact}
                   <br />
@@ -821,7 +787,6 @@ function Director() {
                 <td>{item.dutyRole}</td>
                 <td>{item.assignedDate || "N/A"}</td>
                 <td>{item.releaseDate || "N/A"}</td>
-                <td>{item.dutyGoName || "N/A"}</td>
               </tr>
             ))}
           </tbody>
@@ -830,108 +795,86 @@ function Director() {
 
       {/* ---------------- View Profile Modal ---------------- */}
       {viewDirector && (
-        <div className="modal-overlay no-print" onClick={() => setViewDirector(null)}>
-          <div className="modal-content modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Director Details</h2>
-              <button
-                className="modal-close"
-                onClick={() => setViewDirector(null)}
-              >
-                <X size={20} />
-              </button>
-            </div>
+        <div className="modal fade show d-block d-print-none" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+          <div className="modal-dialog modal-lg modal-dialog-centered">
+            <div className="modal-content border-0 shadow">
+              <div className="modal-header bg-light py-3">
+                <h5 className="modal-title fw-bold text-primary">Director Profile</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setViewDirector(null)}
+                ></button>
+              </div>
 
-            <div className="modal-body">
-              <div className="modal-profile-header">
-                <div className="profile-avatar">
+              <div className="modal-body p-4">
+                <div className="d-flex align-items-center gap-3 mb-4 pb-3 border-bottom">
                   {viewDirector.image ? (
-                    <img src={viewDirector.image} alt={viewDirector.name} className="avatar-img-lg" />
+                    <img
+                      src={viewDirector.image}
+                      alt={viewDirector.dirName}
+                      className="rounded-circle border"
+                      style={{ width: "64px", height: "64px", objectFit: "cover" }}
+                    />
                   ) : (
-                    <User size={32} />
+                    <div
+                      className="rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center"
+                      style={{ width: "64px", height: "64px" }}
+                    >
+                      <User size={32} />
+                    </div>
                   )}
+                  <div>
+                    <h4 className="mb-0 fw-bold">{viewDirector.dirName}</h4>
+                    <span className="text-muted">{viewDirector.dirDesignation}</span>
+                  </div>
                 </div>
-                <div>
-                  <h3>{viewDirector.name}</h3>
-                  <p className="sub-text">{viewDirector.designation}</p>
-                  <span
-                    className={`status-pill ${
-                      viewDirector.status === "Active"
-                        ? "status-pill-green"
-                        : "status-pill-red"
-                    }`}
-                  >
-                    {viewDirector.status}
-                  </span>
-                </div>
-              </div>
 
-              <div className="modal-section">
-                <h4>Contact Details</h4>
-                <div className="modal-grid">
-                  <div className="modal-item">
-                    <label>
-                      <Briefcase size={14} /> Designation
-                    </label>
-                    <p>{viewDirector.designation}</p>
+                <div className="row g-3">
+                  <div className="col-md-6">
+                    <strong className="d-block text-muted small">Ministry</strong>
+                    <span className="fw-semibold">{viewDirector.ministryName}</span>
                   </div>
-                  <div className="modal-item">
-                    <label>
-                      <Building size={14} /> Office / Department
-                    </label>
-                    <p>{viewDirector.office}</p>
+                  <div className="col-md-6">
+                    <strong className="d-block text-muted small">Directorate</strong>
+                    <span>{viewDirector.directorateName || "N/A"}</span>
                   </div>
-                  <div className="modal-item">
-                    <label>
-                      <Phone size={14} /> Contact
-                    </label>
-                    <p>{viewDirector.contact}</p>
+                  <div className="col-md-6">
+                    <strong className="d-block text-muted small">Contact Number</strong>
+                    <span>{viewDirector.contact}</span>
                   </div>
-                  <div className="modal-item">
-                    <label>
-                      <Mail size={14} /> Email
-                    </label>
-                    <p>{viewDirector.email}</p>
+                  <div className="col-md-6">
+                    <strong className="d-block text-muted small">Email Address</strong>
+                    <span>{viewDirector.email}</span>
+                  </div>
+                  <div className="col-md-6">
+                    <strong className="d-block text-muted small">Assigned Project</strong>
+                    <span className="fw-semibold">{viewDirector.projectName}</span>
+                  </div>
+                  <div className="col-md-6">
+                    <strong className="d-block text-muted small">Duty Role</strong>
+                    <span>{viewDirector.dutyRole}</span>
+                  </div>
+                  <div className="col-md-6">
+                    <strong className="d-block text-muted small">Assigned Date</strong>
+                    <span>{viewDirector.assignedDate || "N/A"}</span>
+                  </div>
+                  <div className="col-md-6">
+                    <strong className="d-block text-muted small">Release Date</strong>
+                    <span>{viewDirector.releaseDate || "N/A"}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="modal-section">
-                <h4>Assigned Project & GO Details</h4>
-                <div className="project-history-card">
-                  <div className="proj-card-header">
-                    <h5>
-                      <FolderKanban size={16} /> {viewDirector.projectName}
-                    </h5>
-                    <span className="duty-badge">{viewDirector.dutyRole}</span>
-                  </div>
-                  <div className="proj-card-details">
-                    <span>
-                      <Clock size={12} /> Assigned Date: {viewDirector.assignedDate || "N/A"}
-                    </span>
-                    <span>
-                      <Clock size={12} /> Release Date: {viewDirector.releaseDate || "N/A"}
-                    </span>
-                    {viewDirector.dutyGoName && (
-                      <span className="go-modal-link">
-                        <FileText size={12} /> Duty GO Document:{" "}
-                        <a href={viewDirector.dutyGoUrl || "#"} target="_blank" rel="noreferrer">
-                          {viewDirector.dutyGoName} <ExternalLink size={10} />
-                        </a>
-                      </span>
-                    )}
-                  </div>
-                </div>
+              <div className="modal-footer bg-light py-2">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setViewDirector(null)}
+                >
+                  Close
+                </button>
               </div>
-            </div>
-
-            <div className="modal-footer">
-              <button
-                className="button-secondary"
-                onClick={() => setViewDirector(null)}
-              >
-                Close
-              </button>
             </div>
           </div>
         </div>
