@@ -1,5 +1,4 @@
-import React, { useState, useMemo } from "react";
-import "./FinancialProgress.css";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   Search,
@@ -10,86 +9,98 @@ import {
   PieChart,
   AlertCircle,
   FileText,
-  X,
-  DollarSign,
   Briefcase,
-  Calendar
+  Loader,
+  Pencil,
 } from "lucide-react";
 
-// Predefined Projects List with allocated total budgets
-const EXISTING_PROJECTS = [
-  { id: "p1", name: "Highway Expansion Phase 2", category: "Infrastructure", totalBudget: 500000 },
-  { id: "p2", name: "Metro Rail Line Extension", category: "Transport", totalBudget: 1200000 },
-  { id: "p3", name: "Smart City Grid Automation", category: "Technology", totalBudget: 750000 },
-  { id: "p4", name: "Central Water Treatment Plant", category: "Public Works", totalBudget: 450000 }
-];
+import {
+  getAllFinancialProgress,
+  createFinancialProgress,
+  updateFinancialProgress,
+  deleteFinancialProgress,
+} from "../../services/FinancialProgressService";
+
+import { getAllProjects } from "../../services/ProjectService";
 
 const INITIAL_FORM_STATE = {
   id: null,
   projectId: "",
   projectName: "",
-  totalBudget: 0,
+  totalBudget: "",
   expenseAmount: "",
   purpose: "",
-  expenseDate: new Date().toISOString().split("T")[0]
+  expenseDate: new Date().toISOString().split("T")[0],
 };
 
-const INITIAL_EXPENSES = [
-  {
-    id: 1,
-    projectId: "p1",
-    projectName: "Highway Expansion Phase 2",
-    totalBudget: 500000,
-    expenseAmount: 45000,
-    purpose: "Heavy Machinery Fuel & Maintenance",
-    expenseDate: "2026-07-15"
-  },
-  {
-    id: 2,
-    projectId: "p2",
-    projectName: "Metro Rail Line Extension",
-    totalBudget: 1200000,
-    expenseAmount: 120000,
-    purpose: "Steel Beam Procurement",
-    expenseDate: "2026-07-20"
-  }
-];
+const formatNumber = (val) => {
+  const num = Number(val || 0);
+  return num.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
+
 function FinancialProgress() {
-  const [expenses, setExpenses] = useState(INITIAL_EXPENSES);
+  const [projects, setProjects] = useState([]);
+  const [expenses, setExpenses] = useState([]);
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [errors, setErrors] = useState({});
-  const [isEditing, setIsEditing] = useState(false);
+  const [formError, setFormError] = useState(null);
 
-  // Search & Modal States
+  const [loading, setLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewItem, setViewItem] = useState(null);
 
-  const formatCurrency = (val) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0
-    }).format(val || 0);
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [projRes, expRes] = await Promise.all([
+        getAllProjects().catch(() => ({ data: [] })),
+        getAllFinancialProgress().catch(() => ({ data: [] })),
+      ]);
+      setProjects(projRes.data || []);
+      setExpenses(expRes.data || []);
+    } catch (err) {
+      console.error("Failed to fetch records from backend:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Calculate current total spent for a specific project
+  const calculateEffectiveBudget = (proj) => {
+    if (!proj) return 0;
+    const revB = Number(proj.revisedBudget || 0);
+    const appB = Number(proj.approvedBudget || 0);
+    return revB > 0 ? revB : appB;
+  };
+
   const getProjectSpentTotal = (projectId, excludeExpenseId = null) => {
     return expenses
-      .filter((exp) => exp.projectId === projectId && exp.id !== excludeExpenseId)
+      .filter(
+        (exp) =>
+          String(exp.projectId) === String(projectId) &&
+          exp.id !== excludeExpenseId
+      )
       .reduce((acc, curr) => acc + Number(curr.expenseAmount || 0), 0);
   };
 
-  // Handle Project Selection & Auto-fill Total Budget
   const handleProjectSelect = (e) => {
     const selectedId = e.target.value;
-    const project = EXISTING_PROJECTS.find((p) => p.id === selectedId);
+    const project = projects.find((p) => String(p.id) === String(selectedId));
 
     if (project) {
+      const effectiveBudget = calculateEffectiveBudget(project);
       setFormData((prev) => ({
         ...prev,
-        projectId: project.id,
-        projectName: project.name,
-        totalBudget: project.totalBudget
+        projectId: String(project.id),
+        projectName: project.projectName,
+        totalBudget: effectiveBudget,
       }));
       if (errors.projectId) setErrors((prev) => ({ ...prev, projectId: null }));
     } else {
@@ -97,7 +108,7 @@ function FinancialProgress() {
         ...prev,
         projectId: "",
         projectName: "",
-        totalBudget: 0
+        totalBudget: "",
       }));
     }
   };
@@ -105,79 +116,100 @@ function FinancialProgress() {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormError(null);
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }));
   };
 
-  // Form Validation including Budget Overflow Check
   const validateForm = () => {
     const newErrors = {};
     if (!formData.projectId) newErrors.projectId = "Please select a project.";
-    
+
     const amount = parseFloat(formData.expenseAmount);
-    if (!formData.expenseAmount || amount <= 0) {
-      newErrors.expenseAmount = "Enter a valid expense amount.";
+    if (!formData.expenseAmount || isNaN(amount) || amount <= 0) {
+      newErrors.expenseAmount = "Enter a valid positive expense amount.";
     } else if (formData.projectId) {
-      // Validate that total expenses do not exceed Total Allocated Budget
       const currentSpent = getProjectSpentTotal(formData.projectId, formData.id);
-      const remainingBudget = formData.totalBudget - currentSpent;
+      const totalCap = Number(formData.totalBudget || 0);
+      const remainingBudget = Math.max(0, totalCap - currentSpent);
 
       if (amount > remainingBudget) {
-        newErrors.expenseAmount = `Expense exceeds available budget! Remaining: ${formatCurrency(remainingBudget)}`;
+        newErrors.expenseAmount = `Expense exceeds limit! Max remaining: ${formatNumber(remainingBudget)} Lakhs Tk`;
       }
     }
 
-    if (!formData.purpose.trim()) {
+    if (!formData.purpose || !formData.purpose.trim()) {
       newErrors.purpose = "Purpose of expense is required.";
+    }
+    if (!formData.expenseDate) {
+      newErrors.expenseDate = "Date is required.";
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    if (isEditing) {
-      setExpenses((prev) =>
-        prev.map((item) =>
-          item.id === formData.id
-            ? {
-                ...formData,
-                expenseAmount: parseFloat(formData.expenseAmount),
-                totalBudget: parseFloat(formData.totalBudget)
-              }
-            : item
-        )
-      );
-      setIsEditing(false);
-    } else {
-      const newExpense = {
-        ...formData,
-        id: Date.now(),
-        expenseAmount: parseFloat(formData.expenseAmount),
-        totalBudget: parseFloat(formData.totalBudget)
-      };
-      setExpenses((prev) => [newExpense, ...prev]);
-    }
+    setFormError(null);
+    const payload = {
+      projectId: Number(formData.projectId),
+      expenseAmount: Number(formData.expenseAmount),
+      purpose: formData.purpose.trim(),
+      expenseDate: formData.expenseDate,
+    };
 
-    setFormData(INITIAL_FORM_STATE);
+    try {
+      if (isEditing) {
+        const res = await updateFinancialProgress(formData.id, payload);
+        setExpenses((prev) =>
+          prev.map((item) => (item.id === formData.id ? res.data : item))
+        );
+      } else {
+        const res = await createFinancialProgress(payload);
+        setExpenses((prev) => [res.data, ...prev]);
+      }
+      handleCancelEdit();
+    } catch (err) {
+      const msg =
+        err.response?.data?.message ||
+        err.response?.data ||
+        "Failed to save financial record.";
+      setFormError(typeof msg === "string" ? msg : JSON.stringify(msg));
+    }
   };
 
   const handleEdit = (item) => {
-    setFormData({ ...item });
+    const matchedProj = projects.find(
+      (p) => String(p.id) === String(item.projectId)
+    );
+    const effectiveBudget = calculateEffectiveBudget(matchedProj);
+
+    setFormData({
+      id: item.id,
+      projectId: String(item.projectId),
+      projectName: item.projectName,
+      totalBudget: effectiveBudget,
+      expenseAmount: String(item.expenseAmount),
+      purpose: item.purpose,
+      expenseDate: item.expenseDate,
+    });
     setIsEditing(true);
     setErrors({});
+    setFormError(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleDelete = (id) => {
-    if (window.confirm("Are you sure you want to delete this expense record?")) {
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this expense record?"))
+      return;
+    try {
+      await deleteFinancialProgress(id);
       setExpenses((prev) => prev.filter((item) => item.id !== id));
-      if (formData.id === id) {
-        setFormData(INITIAL_FORM_STATE);
-        setIsEditing(false);
-      }
+      if (formData.id === id) handleCancelEdit();
+    } catch (err) {
+      alert("Failed to delete record.");
     }
   };
 
@@ -185,297 +217,377 @@ function FinancialProgress() {
     setFormData(INITIAL_FORM_STATE);
     setIsEditing(false);
     setErrors({});
+    setFormError(null);
   };
 
-  // Filtered List based on search
+  const handlePrint = () => {
+    const printWindow = window.open("", "_blank", "width=900,height=650");
+    if (!printWindow) return;
+
+    const rowsHtml = filteredExpenses
+      .map(
+        (exp) => `
+      <tr>
+        <td><strong>${exp.projectName}</strong></td>
+        <td>${formatNumber(exp.totalBudget)}</td>
+        <td style="color: #dc3545; font-weight: bold;">${formatNumber(exp.expenseAmount)}</td>
+        <td>${exp.purpose}</td>
+        <td>${exp.expenseDate}</td>
+      </tr>
+    `
+      )
+      .join("");
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Financial Progress Report</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; color: #212529; }
+            h2 { margin-bottom: 5px; }
+            p { font-size: 12px; color: #6c757d; margin-top: 0; margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th, td { border: 1px solid #dee2e6; padding: 8px 10px; text-align: left; font-size: 12px; }
+            th { background-color: #212529; color: #fff; }
+            tr:nth-child(even) { background-color: #f8f9fa; }
+          </style>
+        </head>
+        <body>
+          <h2>Project Expense Ledger</h2>
+          <p>Generated on: ${new Date().toLocaleDateString()} | Total Records: ${filteredExpenses.length}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Project Name</th>
+                <th>Total Budget (in Lakhs Tk)</th>
+                <th>Expense Amount (in Lakhs Tk)</th>
+                <th>Purpose</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml.length > 0 ? rowsHtml : '<tr><td colspan="5" style="text-align:center;">No expense records available</td></tr>'}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  };
+
   const filteredExpenses = useMemo(() => {
-    return expenses.filter((item) => {
-      return (
-        item.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.purpose.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    });
+    const query = searchTerm.toLowerCase().trim();
+    return expenses.filter(
+      (item) =>
+        (item.projectName || "").toLowerCase().includes(query) ||
+        (item.purpose || "").toLowerCase().includes(query)
+    );
   }, [expenses, searchTerm]);
 
   return (
-    <div className="dashboard-page">
-      {/* Main Expense Entry Form */}
-      <div className="dashboard-card no-print">
-        <div className="dashboard-card-header">
-          <h3>{isEditing ? "Edit Project Expense" : "Record Project Expense"}</h3>
-          <PieChart className="card-action-icon" size={20} />
+    <div className="container-fluid py-4 bg-light min-vh-100">
+      {/* Entry Form */}
+      <div className="card shadow-sm border-0 mb-4 d-print-none">
+        <div className="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
+          <h5 className="mb-0 text-primary fw-bold">
+            {isEditing ? "Edit Financial Progress Record" : "Record Financial Progress / Expense"}
+          </h5>
+          <PieChart className="text-primary" size={20} />
         </div>
 
-        <form onSubmit={handleSubmit} className="project-form">
-          <div className="form-grid form-grid-3">
-            {/* Project Dropdown */}
-            <div className="form-group">
-              <label>
-                Select Project <span className="req-star">*</span>
-              </label>
-              <select
-                name="projectId"
-                value={formData.projectId}
-                onChange={handleProjectSelect}
-                className={errors.projectId ? "input-error" : ""}
-              >
-                <option value="">-- Choose Project --</option>
-                {EXISTING_PROJECTS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              {errors.projectId && <span className="field-error">{errors.projectId}</span>}
+        <div className="card-body p-4">
+          {formError && (
+            <div className="alert alert-danger d-flex align-items-center gap-2 py-2 px-3 mb-3">
+              <AlertCircle size={16} />
+              <span className="small">{formError}</span>
             </div>
+          )}
 
-            {/* Total Budget (Read-Only) */}
-            <div className="form-group">
-              <label>Total Allocated Budget ($)</label>
-              <input
-                type="text"
-                value={formData.totalBudget ? formatCurrency(formData.totalBudget) : "Select a project"}
-                readOnly
-                style={{ backgroundColor: "var(--bg-primary)", cursor: "not-allowed" }}
-              />
+          <form onSubmit={handleSubmit} noValidate>
+            <div className="row g-3">
+              {/* Clean Project Dropdown */}
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">
+                  Select Project <span className="text-danger">*</span>
+                </label>
+                <select
+                  name="projectId"
+                  value={formData.projectId}
+                  onChange={handleProjectSelect}
+                  className={`form-select ${errors.projectId ? "is-invalid" : ""}`}
+                >
+                  <option value="">-- Choose Project --</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.projectName}
+                    </option>
+                  ))}
+                </select>
+                {errors.projectId && <div className="invalid-feedback">{errors.projectId}</div>}
+              </div>
+
+              {/* Total Budget Display */}
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">Total Allocated Budget (in Lakhs Tk)</label>
+                <input
+                  type="text"
+                  className="form-control bg-light"
+                  value={
+                    formData.totalBudget !== "" ? formatNumber(formData.totalBudget) : "Select a project"
+                  }
+                  readOnly
+                />
+              </div>
+
+              {/* Expense Amount */}
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">
+                  Expense Amount (in Lakhs Tk) <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  name="expenseAmount"
+                  placeholder="0.00"
+                  value={formData.expenseAmount}
+                  onChange={handleInputChange}
+                  className={`form-control ${errors.expenseAmount ? "is-invalid" : ""}`}
+                />
+                {errors.expenseAmount && <div className="invalid-feedback">{errors.expenseAmount}</div>}
+              </div>
+
+              {/* Purpose */}
+              <div className="col-md-8">
+                <label className="form-label fw-semibold">
+                  Purpose of Expense <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="purpose"
+                  placeholder="e.g. Fuel for machinery, Vendor payment, Steel procurement..."
+                  value={formData.purpose}
+                  onChange={handleInputChange}
+                  className={`form-control ${errors.purpose ? "is-invalid" : ""}`}
+                />
+                {errors.purpose && <div className="invalid-feedback">{errors.purpose}</div>}
+              </div>
+
+              {/* Expense Date */}
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">
+                  Expense Date <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="date"
+                  name="expenseDate"
+                  value={formData.expenseDate}
+                  onChange={handleInputChange}
+                  className={`form-control ${errors.expenseDate ? "is-invalid" : ""}`}
+                />
+                {errors.expenseDate && <div className="invalid-feedback">{errors.expenseDate}</div>}
+              </div>
+
+              {/* Actions */}
+              <div className="col-12 d-flex justify-content-end gap-2 mt-4 pt-2 border-top">
+                {isEditing && (
+                  <span className="badge bg-primary-subtle text-primary border me-auto p-2 align-self-center">
+                    Editing Record ID: #{formData.id}
+                  </span>
+                )}
+                {isEditing && (
+                  <button type="button" className="btn btn-outline-secondary" onClick={handleCancelEdit}>
+                    Cancel
+                  </button>
+                )}
+                <button type="submit" className="btn btn-primary d-inline-flex align-items-center gap-1">
+                  {isEditing ? <Pencil size={16} /> : <Plus size={16} />}
+                  {isEditing ? "Update Expense Record" : "Add Expense Record"}
+                </button>
+              </div>
             </div>
-
-            {/* Expense Amount */}
-            <div className="form-group">
-              <label>
-                Expense Amount ($) <span className="req-star">*</span>
-              </label>
-              <input
-                type="number"
-                name="expenseAmount"
-                placeholder="0.00"
-                value={formData.expenseAmount}
-                onChange={handleInputChange}
-                className={errors.expenseAmount ? "input-error" : ""}
-              />
-              {errors.expenseAmount && <span className="field-error">{errors.expenseAmount}</span>}
-            </div>
-          </div>
-
-          {/* Purpose of Expense */}
-          <div className="form-group">
-            <label>
-              Purpose of Expense <span className="req-star">*</span>
-            </label>
-            <input
-              type="text"
-              name="purpose"
-              placeholder="e.g. Fuel for machinery, Office supplies, Vendor payment..."
-              value={formData.purpose}
-              onChange={handleInputChange}
-              className={errors.purpose ? "input-error" : ""}
-            />
-            {errors.purpose && <span className="field-error">{errors.purpose}</span>}
-          </div>
-
-          {/* Form Actions */}
-          <div className="form-actions">
-            {isEditing && <span className="editing-badge">Editing Record #{formData.id}</span>}
-            {isEditing && (
-              <button type="button" onClick={handleCancelEdit} className="button-secondary">
-                Cancel
-              </button>
-            )}
-            <button type="submit" className="button-primary">
-              <Plus size={16} /> {isEditing ? "Update Expense" : "Add Expense Record"}
-            </button>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
 
-      {/* Expense List Table Bellow */}
-      <div className="dashboard-card no-print">
-        <div className="dashboard-card-header">
-          <h3>Expense Transactions Ledger</h3>
-          <div className="header-actions">
-            <div className="search-box">
-              <Search size={14} className="search-icon" />
+      {/* Directory Table */}
+      <div className="card shadow-sm border-0 d-print-none">
+        <div className="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">
+          <h5 className="mb-0 fw-bold text-dark">
+            Expense Transactions Ledger <span className="badge bg-secondary ms-1">{filteredExpenses.length}</span>
+          </h5>
+
+          <div className="d-flex align-items-center gap-2">
+            <div className="input-group input-group-sm" style={{ width: "260px" }}>
+              <span className="input-group-text bg-light border-end-0">
+                <Search size={14} />
+              </span>
               <input
                 type="text"
+                className="form-control bg-light border-start-0"
                 placeholder="Search purpose or project..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
 
-            <button onClick={() => window.print()} className="button-secondary print-btn" title="Print Ledger">
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+              onClick={handlePrint}
+            >
               <Printer size={14} /> Print
             </button>
           </div>
         </div>
 
-        <div className="table-overflow">
-          <table className="projects-table">
-            <thead>
-              <tr>
-                <th>Project Name</th>
-                <th>Total Budget</th>
-                <th>Expense Amount</th>
-                <th>Purpose of Expense</th>
-                <th>Date</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredExpenses.length > 0 ? (
-                filteredExpenses.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <span className="project-name-tag">{item.projectName}</span>
-                    </td>
-                    <td style={{ fontWeight: 500, color: "var(--text-muted)" }}>
-                      {formatCurrency(item.totalBudget)}
-                    </td>
-                    <td style={{ fontWeight: 600, color: "var(--danger-color)" }}>
-                      {formatCurrency(item.expenseAmount)}
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                        <FileText size={14} className="sub-text" />
-                        <span>{item.purpose}</span>
-                      </div>
-                    </td>
-                    <td className="sub-text">{item.expenseDate}</td>
-                    <td>
-                      <div className="table-action-cell" style={{ justifyContent: "flex-end" }}>
-                        <button
-                          onClick={() => setViewItem(item)}
-                          className="action-button"
-                          title="View Details"
-                        >
-                          <Eye size={15} />
-                        </button>
-                        <button
-                          onClick={() => handleEdit(item)}
-                          className="action-button action-button-edit"
-                          title="Edit Record"
-                        >
-                          <Edit2 size={15} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="action-button action-button-danger"
-                          title="Delete Expense"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </td>
+        <div className="card-body p-0">
+          <div className="table-responsive">
+            {loading ? (
+              <div className="text-center py-5 text-muted">
+                <Loader size={24} className="spinner-border text-primary border-0" />
+                <p className="mt-2 small">Loading records...</p>
+              </div>
+            ) : filteredExpenses.length === 0 ? (
+              <div className="text-center py-5 text-muted">
+                <AlertCircle size={32} className="mb-2" />
+                <p className="mb-0">No expense records found.</p>
+              </div>
+            ) : (
+              <table className="table table-hover align-middle mb-0">
+                <thead className="table-dark">
+                  <tr>
+                    <th>Project Name</th>
+                    <th>Total Budget (in Lakhs Tk)</th>
+                    <th>Expense Amount (in Lakhs Tk)</th>
+                    <th>Purpose of Expense</th>
+                    <th>Expense Date</th>
+                    <th className="text-end">Actions</th>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="6">
-                    <div className="empty-state">
-                      <AlertCircle size={32} />
-                      <p>No expense records found matching your search.</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {filteredExpenses.map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <strong className="text-dark">{item.projectName}</strong>
+                      </td>
+                      <td className="fw-semibold text-secondary">
+                        {formatNumber(item.totalBudget)}
+                      </td>
+                      <td className="fw-bold text-danger">
+                        {formatNumber(item.expenseAmount)}
+                      </td>
+                      <td>
+                        <div className="d-flex align-items-center gap-1">
+                          <FileText size={14} className="text-muted" />
+                          <span>{item.purpose}</span>
+                        </div>
+                      </td>
+                      <td>{item.expenseDate}</td>
+                      <td className="text-end">
+                        <div className="btn-group btn-group-sm">
+                          <button
+                            onClick={() => setViewItem(item)}
+                            className="btn btn-outline-info"
+                            title="View Details"
+                          >
+                            <Eye size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleEdit(item)}
+                            className="btn btn-outline-primary"
+                            title="Edit Record"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            className="btn btn-outline-danger"
+                            title="Delete Record"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* View Detail Modal */}
+      {/* Details Modal */}
       {viewItem && (
-        <div className="modal-overlay" onClick={() => setViewItem(null)}>
-          <div className="modal-content modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Expense Record Details</h2>
-              <button className="modal-close" onClick={() => setViewItem(null)}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <div className="modal-profile-header">
-                <div className="profile-avatar">
-                  <Briefcase size={28} />
+        <div
+          className="modal fade show d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          onClick={() => setViewItem(null)}
+        >
+          <div className="modal-dialog modal-dialog-centered" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-content border-0 shadow">
+              <div className="modal-header bg-light">
+                <h5 className="modal-title fw-bold text-primary">Expense Record Details</h5>
+                <button type="button" className="btn-close" onClick={() => setViewItem(null)}></button>
+              </div>
+              <div className="modal-body p-4">
+                <div className="d-flex align-items-center gap-3 mb-4 pb-3 border-bottom">
+                  <div className="p-3 bg-primary-subtle text-primary rounded-circle">
+                    <Briefcase size={24} />
+                  </div>
+                  <div>
+                    <h5 className="mb-0 fw-bold">{viewItem.projectName}</h5>
+                    <small className="text-muted">Record ID: #{viewItem.id}</small>
+                  </div>
                 </div>
-                <div>
-                  <h3>{viewItem.projectName}</h3>
-                  <span className="sub-text">Record ID: #{viewItem.id}</span>
+
+                <div className="row g-3">
+                  <div className="col-6">
+                    <small className="text-muted d-block">Total Allocated Budget</small>
+                    <strong className="fs-6 text-dark">{formatNumber(viewItem.totalBudget)} Lakhs Tk</strong>
+                  </div>
+                  <div className="col-6">
+                    <small className="text-muted d-block">Expense Amount</small>
+                    <strong className="fs-6 text-danger">{formatNumber(viewItem.expenseAmount)} Lakhs Tk</strong>
+                  </div>
+                  <div className="col-6">
+                    <small className="text-muted d-block">Total Project Expenses</small>
+                    <strong className="fs-6 text-info">
+                      {formatNumber(getProjectSpentTotal(viewItem.projectId))} Lakhs Tk
+                    </strong>
+                  </div>
+                  <div className="col-6">
+                    <small className="text-muted d-block">Date Recorded</small>
+                    <strong className="fs-6 text-dark">{viewItem.expenseDate}</strong>
+                  </div>
+                  <div className="col-12 mt-3">
+                    <div className="p-3 bg-light rounded border">
+                      <small className="text-muted d-block mb-1 fw-semibold">Purpose of Expense</small>
+                      <p className="mb-0 text-dark">{viewItem.purpose}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <div className="modal-grid">
-                <div className="modal-item">
-                  <label><DollarSign size={12} /> Total Allocated Budget</label>
-                  <p>{formatCurrency(viewItem.totalBudget)}</p>
-                </div>
-
-                <div className="modal-item">
-                  <label><DollarSign size={12} /> Expense Amount</label>
-                  <p style={{ color: "var(--danger-color)" }}>{formatCurrency(viewItem.expenseAmount)}</p>
-                </div>
-
-                <div className="modal-item">
-                  <label><Calendar size={12} /> Date Recorded</label>
-                  <p>{viewItem.expenseDate}</p>
-                </div>
-
-                <div className="modal-item">
-                  <label><DollarSign size={12} /> Total Project Expenses</label>
-                  <p>{formatCurrency(getProjectSpentTotal(viewItem.projectId))}</p>
-                </div>
+              <div className="modal-footer bg-light py-2">
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setViewItem(null)}>
+                  Close
+                </button>
               </div>
-
-              <div className="project-history-card">
-                <div className="proj-card-header">
-                  <h5>Purpose of Expense</h5>
-                </div>
-                <div className="proj-card-details">
-                  <p style={{ margin: 0, fontSize: "0.9375rem", color: "var(--text-main)" }}>
-                    {viewItem.purpose}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button className="button-secondary" onClick={() => setViewItem(null)}>
-                Close
-              </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Print View Layout */}
-      <div className="print-table-wrapper">
-        <h1 className="print-title">Project Expense Ledger</h1>
-        <p className="print-subtitle">Date Generated: {new Date().toLocaleDateString()}</p>
-        <table className="print-table" style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              <th>Project Name</th>
-              <th>Total Budget</th>
-              <th>Expense Amount</th>
-              <th>Purpose</th>
-              <th>Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {expenses.map((item) => (
-              <tr key={item.id}>
-                <td>{item.projectName}</td>
-                <td>{formatCurrency(item.totalBudget)}</td>
-                <td>{formatCurrency(item.expenseAmount)}</td>
-                <td>{item.purpose}</td>
-                <td>{item.expenseDate}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
+
 export default FinancialProgress;
