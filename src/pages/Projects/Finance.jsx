@@ -4,11 +4,9 @@ import {
   Trash2,
   Eye,
   Pencil,
-  X,
   Landmark,
   Search,
   Printer,
-  DollarSign,
   ChevronLeft,
   ChevronRight,
   AlertCircle,
@@ -16,9 +14,8 @@ import {
   RotateCcw,
 } from "lucide-react";
 
-const PAGE_SIZE = 10;
-
 import { getAllProjects } from "../../services/ProjectService";
+import { getAllDevPartners } from "../../services/DevelopmentPartnerService";
 import {
   getAllFinanceRecords,
   createFinanceRecord,
@@ -26,36 +23,7 @@ import {
   deleteFinanceRecord,
 } from "../../services/FinanceService";
 
-/* ------------------------------------------------------------------ */
-/* Static Options                                                     */
-/* ------------------------------------------------------------------ */
-
-// Development partners / funding agencies & countries that can be a "Contributor Partner"
-const FUNDING_AGENCIES_AND_COUNTRIES = [
-  "Govt of Bangladesh (GoB)",
-  "World Bank (WB)",
-  "International Monetary Fund (IMF)",
-  "Asian Development Bank (ADB)",
-  "Japan International Cooperation Agency (JICA)",
-  "Asian Infrastructure Investment Bank (AIIB)",
-  "Islamic Development Bank (IsDB)",
-  "United States (USAID)",
-  "United Kingdom (FCDO / DFID)",
-  "China (Exim Bank of China)",
-  "India (Line of Credit - LoC)",
-  "Germany (GIZ / KfW)",
-  "France (AFD)",
-  "European Union (EU)",
-  "South Korea (EDCF / KOICA)",
-  "Saudi Arabia (SFD)",
-  "United Arab Emirates (ADFD)",
-  "Kuwait (KFAED)",
-  "Australia (DFAT)",
-  "Canada (GAC)",
-  "Nordic Development Fund (NDF)",
-  "Other Foreign Grant / Loan",
-];
-
+const PAGE_SIZE = 10;
 
 const formatDate = (isoDate) => {
   if (!isoDate) return "";
@@ -77,11 +45,14 @@ const formatDateTime = (isoDateTime) => {
 
 const EMPTY_FORM = {
   projectId: "",
-  contributors: [{ contributorPartner: "Govt of Bangladesh (GoB)", approvedFund: "", revisedFund: "" }],
+  developmentPartnerId: "",
+  totalApprovedFund: "",
+  totalRevisedFund: "",
 };
 
 function Finance() {
   const [projects, setProjects] = useState([]);
+  const [devPartners, setDevPartners] = useState([]);
   const [financeRecords, setFinanceRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
@@ -102,11 +73,14 @@ function Finance() {
     setLoading(true);
     setApiError(null);
     try {
-      const [projRes, finRes] = await Promise.all([
+      const [projRes, partnerRes, finRes] = await Promise.all([
         getAllProjects().catch(() => ({ data: [] })),
+        getAllDevPartners().catch(() => ({ data: [] })),
         getAllFinanceRecords().catch(() => ({ data: [] })),
       ]);
+
       setProjects(projRes.data || []);
+      setDevPartners(partnerRes.data || []);
       setFinanceRecords(finRes.data || []);
     } catch (error) {
       console.error("Failed to load finance records:", error);
@@ -131,13 +105,20 @@ function Finance() {
     return map;
   }, [projects]);
 
-  /* Project currently selected in the form */
+  /* Selected project and baseline budgets */
   const selectedProject = projectsMap[form.projectId] || null;
   const projectApprovedBudget = Number(selectedProject?.approvedBudget || 0);
-  const hasRevisedBudget = selectedProject?.revisedBudget != null && selectedProject?.revisedBudget !== "";
-  const projectRevisedBudget = hasRevisedBudget ? Number(selectedProject.revisedBudget) : null;
 
-  /* Funds already allocated to this project by OTHER finance records (excludes the one being edited) */
+  const hasProjectRevisedBudget =
+    selectedProject?.revisedBudget != null &&
+    selectedProject?.revisedBudget !== "" &&
+    Number(selectedProject.revisedBudget) > 0;
+
+  const projectRevisedBudget = hasProjectRevisedBudget
+    ? Number(selectedProject.revisedBudget)
+    : null;
+
+  /* Funds already committed across partners for this project (excluding editing record) */
   const alreadyAllocated = useMemo(() => {
     const relevant = financeRecords.filter(
       (r) => String(r.projectId) === String(form.projectId) && r.id !== editingId
@@ -148,89 +129,80 @@ function Finance() {
     };
   }, [financeRecords, form.projectId, editingId]);
 
-  const nextAvailableApproved = Math.max(0, projectApprovedBudget - alreadyAllocated.approved);
-  const nextAvailableRevised =
-    projectRevisedBudget === null ? null : Math.max(0, projectRevisedBudget - alreadyAllocated.revised);
+  /* Unallocated budget pool */
+  const unallocatedApprovedPool = Math.max(0, projectApprovedBudget - alreadyAllocated.approved);
+  const unallocatedRevisedPool =
+    projectRevisedBudget === null
+      ? null
+      : Math.max(0, projectRevisedBudget - alreadyAllocated.revised);
 
-  /* Totals currently entered in the form */
-  const calculatedFormTotals = useMemo(() => {
-    return form.contributors.reduce(
-      (acc, c) => ({
-        approved: acc.approved + (Number(c.approvedFund) || 0),
-        revised: acc.revised + (Number(c.revisedFund) || 0),
-      }),
-      { approved: 0, revised: 0 }
-    );
-  }, [form.contributors]);
+  /* Entered partner amounts */
+  const enteredApproved = Number(form.totalApprovedFund || 0);
+  const enteredRevised = Number(form.totalRevisedFund || 0);
 
-  const isExceedingApproved = calculatedFormTotals.approved > nextAvailableApproved + 0.0001;
+  /* Overbudget checks */
+  const isExceedingApproved = enteredApproved > unallocatedApprovedPool + 0.0001;
   const isExceedingRevised =
-    nextAvailableRevised !== null && calculatedFormTotals.revised > nextAvailableRevised + 0.0001;
+    unallocatedRevisedPool !== null && enteredRevised > unallocatedRevisedPool + 0.0001;
   const isExceedingBudget = isExceedingApproved || isExceedingRevised;
 
-  /* Form Field Handlers */
+  /* Form Field Change Handler */
   const handleChange = (field) => (e) => {
     const value = e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: null }));
   };
 
-  const handleContributorChange = (index, field, value) => {
-    setForm((prev) => {
-      const updated = [...prev.contributors];
-      updated[index] = { ...updated[index], [field]: value };
-      return { ...prev, contributors: updated };
-    });
-    if (errors.contributors) setErrors((prev) => ({ ...prev, contributors: null }));
-  };
-
-  const addContributorRow = () => {
-    const availablePartner =
-      FUNDING_AGENCIES_AND_COUNTRIES.find(
-        (partner) => !form.contributors.some((c) => c.contributorPartner === partner)
-      ) || FUNDING_AGENCIES_AND_COUNTRIES[0];
+  /* Project Selection Handler */
+  const handleProjectSelect = (e) => {
+    const selectedProjId = e.target.value;
+    const proj = projectsMap[selectedProjId];
+    const projHasRevised =
+      proj?.revisedBudget != null &&
+      proj?.revisedBudget !== "" &&
+      Number(proj.revisedBudget) > 0;
 
     setForm((prev) => ({
       ...prev,
-      contributors: [...prev.contributors, { contributorPartner: availablePartner, approvedFund: "", revisedFund: "" }],
+      projectId: selectedProjId,
+      totalRevisedFund: projHasRevised ? prev.totalRevisedFund : "0",
     }));
+
+    if (errors.projectId) setErrors((prev) => ({ ...prev, projectId: null }));
+    if (errors.totalRevisedFund) setErrors((prev) => ({ ...prev, totalRevisedFund: null }));
   };
 
-  const removeContributorRow = (index) => {
-    if (form.contributors.length === 1) return;
-    setForm((prev) => ({
-      ...prev,
-      contributors: prev.contributors.filter((_, i) => i !== index),
-    }));
-  };
-
-  /* Validation */
+  /* Validation Logic */
   const validate = () => {
     const next = {};
+
     if (!form.projectId) next.projectId = "Please select a project";
+    if (!form.developmentPartnerId) next.developmentPartnerId = "Please select a development partner";
 
-    let contributorErr = null;
-    form.contributors.forEach((c) => {
-      if (!c.approvedFund || Number(c.approvedFund) <= 0) {
-        contributorErr = "Please specify a valid Approved Fund for all contributor partners.";
-      }
-      if (c.revisedFund !== "" && c.revisedFund !== null && Number(c.revisedFund) < 0) {
-        contributorErr = "Revised Fund cannot be negative.";
-      }
-    });
+    const approvedNum = Number(form.totalApprovedFund || 0);
+    const revisedNum = Number(form.totalRevisedFund || 0);
 
-    if (!contributorErr && isExceedingApproved) {
-      contributorErr = `Approved fund total (৳ ${calculatedFormTotals.approved.toFixed(
-        2
-      )} Lakhs) exceeds the remaining Approved Budget of ৳ ${nextAvailableApproved.toFixed(2)} Lakhs for this project.`;
-    }
-    if (!contributorErr && isExceedingRevised) {
-      contributorErr = `Revised fund total (৳ ${calculatedFormTotals.revised.toFixed(
-        2
-      )} Lakhs) exceeds the remaining Revised Budget of ৳ ${nextAvailableRevised.toFixed(2)} Lakhs for this project.`;
+    // Require AT LEAST one fund field to be greater than 0
+    if (approvedNum <= 0 && revisedNum <= 0) {
+      next.form = "Please enter either an Approved Fund or a Revised Fund amount";
     }
 
-    if (contributorErr) next.contributors = contributorErr;
+    // Only validate Approved Fund cap if an amount was actually entered
+    if (form.totalApprovedFund !== "" && approvedNum > 0) {
+      if (approvedNum > unallocatedApprovedPool) {
+        next.totalApprovedFund = `Exceeds unallocated approved budget (${unallocatedApprovedPool.toFixed(2)} available)`;
+      }
+    }
+
+    // Validate Revised Fund if project supports it
+    if (hasProjectRevisedBudget && form.totalRevisedFund !== "" && revisedNum > 0) {
+      if (
+        unallocatedRevisedPool !== null &&
+        revisedNum > unallocatedRevisedPool
+      ) {
+        next.totalRevisedFund = `Exceeds unallocated revised budget (${unallocatedRevisedPool.toFixed(2)} available)`;
+      }
+    }
 
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -241,14 +213,10 @@ function Finance() {
     if (!validate()) return;
 
     const payload = {
-        projectId: Number(form.projectId),
-        contributors: form.contributors.map(c => ({
-            id: c.id || null,
-            contributorPartner: c.contributorPartner,
-            approvedFund: Number(c.approvedFund),
-            revisedFund:
-                c.revisedFund === "" ? 0 : Number(c.revisedFund)
-        }))
+      projectId: Number(form.projectId),
+      developmentPartnerId: Number(form.developmentPartnerId),
+      totalApprovedFund: form.totalApprovedFund ? Number(form.totalApprovedFund) : 0,
+      totalRevisedFund: hasProjectRevisedBudget && form.totalRevisedFund ? Number(form.totalRevisedFund) : 0,
     };
 
     setSubmitting(true);
@@ -266,8 +234,9 @@ function Finance() {
       .catch((err) => {
         console.error("Error saving finance record:", err);
         const message =
-          err.response?.data?.message || "Failed to save this record — it may exceed the project's budget.";
-        setErrors((prev) => ({ ...prev, contributors: message }));
+          err.response?.data?.message ||
+          "Failed to save record — contribution may exceed available project budget.";
+        setErrors((prev) => ({ ...prev, form: message }));
       })
       .finally(() => setSubmitting(false));
   };
@@ -279,14 +248,17 @@ function Finance() {
   };
 
   const handleEdit = (record) => {
+    const proj = projectsMap[record.projectId];
+    const projHasRevised =
+      proj?.revisedBudget != null &&
+      proj?.revisedBudget !== "" &&
+      Number(proj.revisedBudget) > 0;
+
     setForm({
-        projectId: String(record.projectId),
-        contributors: record.contributors.map(c => ({
-            id: c.id,
-            contributorPartner: c.contributorPartner,
-            approvedFund: String(c.approvedFund),
-            revisedFund: String(c.revisedFund)
-        }))
+      projectId: String(record.projectId || ""),
+      developmentPartnerId: String(record.developmentPartnerId || ""),
+      totalApprovedFund: String(record.totalApprovedFund || "0"),
+      totalRevisedFund: projHasRevised ? String(record.totalRevisedFund || "0") : "0",
     });
     setEditingId(record.id);
     setErrors({});
@@ -294,7 +266,7 @@ function Finance() {
   };
 
   const handleDelete = (id) => {
-    if (!window.confirm("Remove this finance record? This action cannot be undone.")) return;
+    if (!window.confirm("Remove this development partner funding record?")) return;
     deleteFinanceRecord(id)
       .then(() => {
         fetchFinanceList();
@@ -302,7 +274,7 @@ function Finance() {
       })
       .catch((err) => {
         console.error("Error deleting finance record:", err);
-        alert("Could not delete finance record.");
+        alert("Could not delete record.");
       });
   };
 
@@ -310,16 +282,15 @@ function Finance() {
     window.print();
   };
 
-  /* Search & Pagination */
+  /* Filter and Pagination */
   const filteredFinances = useMemo(
     () =>
-      financeRecords.filter(
-        (f) =>
-          (f.projectName || "").toLowerCase().includes(searchTerm.trim().toLowerCase()) ||
-          f.contributors.some((c) =>
-            (c.contributorPartner || "").toLowerCase().includes(searchTerm.trim().toLowerCase())
-          )
-      ),
+      financeRecords.filter((f) => {
+        const pName = (f.projectName || "").toLowerCase();
+        const partnerName = (f.devPartnerName || "").toLowerCase();
+        const q = searchTerm.trim().toLowerCase();
+        return pName.includes(q) || partnerName.includes(q);
+      }),
     [financeRecords, searchTerm]
   );
 
@@ -336,26 +307,33 @@ function Finance() {
 
   return (
     <div className="container-fluid py-4 bg-light">
-      {/* ---------------- Create / Edit Finance Form ---------------- */}
+      {/* ---------------- Form ---------------- */}
       <div className="card shadow-sm mb-4 border-0 d-print-none">
         <div className="card-header bg-white d-flex justify-content-between align-items-center py-3 border-bottom">
           <h5 className="mb-0 text-primary fw-bold">
-            {editingId ? "Edit Development Partner Fund" : "Record Development Partner Fund"}
+            {editingId ? "Edit Partner Funding Allocation" : "Record Partner Funding Allocation"}
           </h5>
           <Landmark className="text-primary" size={22} />
         </div>
 
         <div className="card-body p-4">
           <form onSubmit={handleSubmit} noValidate>
+            {errors.form && (
+              <div className="alert alert-danger d-flex align-items-center gap-2 py-2 px-3 mb-3">
+                <AlertCircle size={16} className="flex-shrink-0" />
+                <span className="small">{errors.form}</span>
+              </div>
+            )}
+
             <div className="row g-3">
-              {/* Project / Fiscal Year / Disbursement Date */}
-              <div className="col-md-4">
+              {/* Select Project */}
+              <div className="col-md-6">
                 <label className="form-label fw-semibold">
                   Project <span className="text-danger">*</span>
                 </label>
                 <select
                   value={form.projectId}
-                  onChange={handleChange("projectId")}
+                  onChange={handleProjectSelect}
                   className={`form-select ${errors.projectId ? "is-invalid" : ""}`}
                 >
                   <option value="">-- Select Project --</option>
@@ -366,123 +344,124 @@ function Finance() {
                   ))}
                 </select>
                 {errors.projectId && <div className="invalid-feedback">{errors.projectId}</div>}
+
                 {selectedProject && (
-                  <div className="form-text">
-                    Approved Budget: <strong>৳ {projectApprovedBudget.toFixed(2)} Lakhs</strong>
-                    {" · "}
-                    Revised Budget:{" "}
-                    <strong>{projectRevisedBudget !== null ? `৳ ${projectRevisedBudget.toFixed(2)} Lakhs` : "—"}</strong>
-                    <br />
-                    Already Received — Approved: <strong>৳ {alreadyAllocated.approved.toFixed(2)} Lakhs</strong>
-                    {" · "}
-                    Revised: <strong>৳ {alreadyAllocated.revised.toFixed(2)} Lakhs</strong>
+                  <div className="form-text mt-2 p-2 bg-light rounded border">
+                    <div>Approved Budget: <strong>৳ {projectApprovedBudget.toFixed(2)} Lakhs TK</strong></div>
+                    <div>
+                      Revised Budget:{" "}
+                      <strong>
+                        {hasProjectRevisedBudget
+                          ? `৳ ${projectRevisedBudget.toFixed(2)} Lakhs TK`
+                          : "Not set (0)"}
+                      </strong>
+                    </div>
+                    <div className="text-muted small mt-1">
+                      Already Allocated — Approved: <strong>৳ {alreadyAllocated.approved.toFixed(2)} Lakhs TK</strong>
+                      {" | "}
+                      Revised: <strong>৳ {alreadyAllocated.revised.toFixed(2)} Lakhs TK</strong>
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Contributor Partners */}
-              <div className="col-12 mt-4">
-                <div className="d-flex justify-content-between align-items-center mb-2">
-                  <label className="form-label fw-semibold d-flex align-items-center gap-1 mb-0">
-                    <DollarSign size={16} /> Development Partner Contributions (Approved &amp; Revised Fund, Lakhs TK)
-                  </label>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1"
-                    onClick={addContributorRow}
-                    disabled={!form.projectId}
+              {/* Select Development Partner */}
+              <div className="col-md-6">
+                <label className="form-label fw-semibold">
+                  Development Partner <span className="text-danger">*</span>
+                </label>
+                <select
+                  value={form.developmentPartnerId}
+                  onChange={handleChange("developmentPartnerId")}
+                  className={`form-select ${errors.developmentPartnerId ? "is-invalid" : ""}`}
+                >
+                  <option value="">-- Select Development Partner --</option>
+                  {devPartners.map((partner) => (
+                    <option key={partner.id} value={partner.id}>
+                      {partner.devPartnerName}
+                    </option>
+                  ))}
+                </select>
+                {errors.developmentPartnerId && (
+                  <div className="invalid-feedback">{errors.developmentPartnerId}</div>
+                )}
+              </div>
+
+              {/* Partner Approved Fund (Optional if inserting Revised Fund) */}
+              <div className="col-md-6">
+                <label className="form-label fw-semibold">
+                  Approved Fund (Lakhs TK)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={form.totalApprovedFund}
+                  onChange={handleChange("totalApprovedFund")}
+                  className={`form-control ${errors.totalApprovedFund || isExceedingApproved ? "is-invalid" : ""}`}
+                />
+                {errors.totalApprovedFund && (
+                  <div className="invalid-feedback">{errors.totalApprovedFund}</div>
+                )}
+              </div>
+
+              {/* Partner Revised Fund */}
+              <div className="col-md-6">
+                <label className="form-label fw-semibold">
+                  Revised Fund (Lakhs TK)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={hasProjectRevisedBudget ? form.totalRevisedFund : "0"}
+                  onChange={handleChange("totalRevisedFund")}
+                  readOnly={!hasProjectRevisedBudget}
+                  disabled={!hasProjectRevisedBudget}
+                  className={`form-control ${!hasProjectRevisedBudget ? "bg-secondary-subtle" : ""} ${errors.totalRevisedFund || isExceedingRevised ? "is-invalid" : ""}`}
+                />
+                {!hasProjectRevisedBudget && form.projectId && (
+                  <small className="text-muted d-block mt-1">
+                    Revised budget is not set for this project. Set to 0.
+                  </small>
+                )}
+                {errors.totalRevisedFund && (
+                  <div className="invalid-feedback">{errors.totalRevisedFund}</div>
+                )}
+              </div>
+
+              {/* Pool Status Indicators */}
+              {selectedProject && (
+                <div className="col-12 mt-2">
+                  <div
+                    className={`alert ${isExceedingApproved ? "alert-danger" : "alert-light border"} d-flex justify-content-between align-items-center py-2 px-3 mb-2`}
                   >
-                    <Plus size={14} /> Add Contributor Partner
-                  </button>
-                </div>
-
-                {errors.contributors && (
-                  <div className="alert alert-danger d-flex align-items-center gap-2 py-2 px-3">
-                    <AlertCircle size={16} className="flex-shrink-0" />
-                    <span className="small">{errors.contributors}</span>
+                    <span className="small">Entered Approved / Unallocated Approved Budget:</span>
+                    <strong className={isExceedingApproved ? "text-danger" : "text-success"}>
+                      ৳ {enteredApproved.toFixed(2)} / ৳ {unallocatedApprovedPool.toFixed(2)} Lakhs TK
+                    </strong>
                   </div>
-                )}
-
-                {form.contributors.map((contributor, idx) => (
-                  <div className="row g-2 align-items-end mb-2 p-2 border rounded bg-white" key={idx}>
-                    <div className="col-md-5">
-                      <label className="form-label small text-muted mb-1">Contributor Partner</label>
-                      <select
-                        className="form-select form-select-sm"
-                        value={contributor.contributorPartner}
-                        onChange={(e) => handleContributorChange(idx, "contributorPartner", e.target.value)}
-                      >
-                        {FUNDING_AGENCIES_AND_COUNTRIES.map((agency, aIdx) => (
-                          <option key={aIdx} value={agency}>
-                            {agency}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="col-md-3">
-                      <label className="form-label small text-muted mb-1">Approved Fund (Lakhs TK)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={contributor.approvedFund}
-                        onChange={(e) => handleContributorChange(idx, "approvedFund", e.target.value)}
-                        className={`form-control form-control-sm ${isExceedingApproved ? "is-invalid" : ""}`}
-                      />
-                    </div>
-
-                    <div className="col-md-3">
-                      <label className="form-label small text-muted mb-1">Revised Fund (Lakhs TK)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={contributor.revisedFund}
-                        onChange={(e) => handleContributorChange(idx, "revisedFund", e.target.value)}
-                        className={`form-control form-control-sm ${isExceedingRevised ? "is-invalid" : ""}`}
-                      />
-                    </div>
-
-                    <div className="col-md-1 d-flex justify-content-end">
-                      {form.contributors.length > 1 && (
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-danger"
-                          onClick={() => removeContributorRow(idx)}
-                          title="Remove Contributor"
-                        >
-                          <X size={14} />
-                        </button>
-                      )}
-                    </div>
+                  <div
+                    className={`alert ${isExceedingRevised ? "alert-danger" : "alert-light border"} d-flex justify-content-between align-items-center py-2 px-3 mb-0`}
+                  >
+                    <span className="small">Entered Revised / Unallocated Revised Budget:</span>
+                    <strong className={isExceedingRevised ? "text-danger" : "text-success"}>
+                      ৳ {enteredRevised.toFixed(2)} /{" "}
+                      {unallocatedRevisedPool !== null
+                        ? `৳ ${unallocatedRevisedPool.toFixed(2)} Lakhs TK`
+                        : "No revised budget (0)"}
+                    </strong>
                   </div>
-                ))}
+                </div>
+              )}
 
-                <div
-                  className={`alert ${isExceedingApproved ? "alert-danger" : "alert-light border"} d-flex justify-content-between align-items-center py-2 px-3 mb-2 mt-2`}
-                >
-                  <span className="small">Approved Total / Remaining Approved Cap:</span>
-                  <strong className={isExceedingApproved ? "text-danger" : "text-success"}>
-                    ৳ {calculatedFormTotals.approved.toFixed(2)} / ৳ {nextAvailableApproved.toFixed(2)} Lakhs
-                  </strong>
-                </div>
-                <div
-                  className={`alert ${isExceedingRevised ? "alert-danger" : "alert-light border"} d-flex justify-content-between align-items-center py-2 px-3 mb-0`}
-                >
-                  <span className="small">Revised Total / Remaining Revised Cap:</span>
-                  <strong className={isExceedingRevised ? "text-danger" : "text-success"}>
-                    ৳ {calculatedFormTotals.revised.toFixed(2)} /{" "}
-                    {nextAvailableRevised !== null ? `৳ ${nextAvailableRevised.toFixed(2)} Lakhs` : "No cap set"}
-                  </strong>
-                </div>
-              </div>
+              {/* Actions */}
               <div className="col-12 d-flex justify-content-end align-items-center gap-2 mt-4 pt-2 border-top">
                 {editingId && (
                   <span className="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle me-auto px-2 py-2">
-                    Editing: {selectedProject?.projectName || ""}
+                    Editing Record ID: #{editingId}
                   </span>
                 )}
                 <button
@@ -505,7 +484,7 @@ function Finance() {
                   ) : (
                     <Plus size={16} />
                   )}
-                  {editingId ? "Save Changes" : "Record Fund"}
+                  {editingId ? "Save Changes" : "Record Contribution"}
                 </button>
               </div>
             </div>
@@ -513,7 +492,7 @@ function Finance() {
         </div>
       </div>
 
-      {/* ---------------- Finance List Table ---------------- */}
+      {/* ---------------- Table ---------------- */}
       <div className="card shadow-sm border-0 d-print-none">
         <div className="card-header bg-white d-flex flex-wrap justify-content-between align-items-center py-3 gap-2 border-bottom">
           <div>
@@ -551,7 +530,7 @@ function Finance() {
             {loading ? (
               <div className="text-center py-5">
                 <Loader size={28} className="spinner-border text-primary border-0" />
-                <p className="mt-2 text-muted">Loading finance records...</p>
+                <p className="mt-2 text-muted">Loading records...</p>
               </div>
             ) : apiError ? (
               <div className="text-center py-5 text-danger">
@@ -561,11 +540,7 @@ function Finance() {
             ) : filteredFinances.length === 0 ? (
               <div className="text-center py-5 text-muted">
                 <Landmark size={28} />
-                <p className="mt-2">
-                  {financeRecords.length === 0
-                    ? "No financial records found. Add one above."
-                    : "No records match your search."}
-                </p>
+                <p className="mt-2">No financial records found.</p>
               </div>
             ) : (
               <>
@@ -573,60 +548,33 @@ function Finance() {
                   <thead className="table-dark">
                     <tr>
                       <th>Project Name</th>
-                      <th>Approved Budget</th>
-                      <th>Revised Budget</th>
-                      <th>Contributor Partners</th>
-                      <th>Approved Fund Received</th>
-                      <th>Revised Fund Received</th>
+                      <th>Development Partner</th>
+                      <th>Approved Fund (Lakhs TK)</th>
+                      <th>Revised Fund (Lakhs TK)</th>
                       <th>Created</th>
-                      <th>Updated</th>
                       <th className="text-end">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {pageFinances.map((item) => (
                       <tr key={item.id}>
-                        <td className="fw-semibold text-dark">{item.projectName}</td>
-                        <td className="fw-semibold">৳ {Number(item.projectApprovedBudget || 0).toFixed(2)} Lakhs</td>
-                        <td>
-                          {item.projectRevisedBudget != null
-                            ? `৳ ${Number(item.projectRevisedBudget).toFixed(2)} Lakhs`
-                            : "—"}
-                        </td>
-                        <td>
-                          <div className="d-flex flex-wrap gap-1">
-                            {item.contributors.map((c, i) => (
-                              <span
-                                key={i}
-                                className="badge bg-light text-dark border small fw-normal px-2 py-1"
-                              >
-                                {c.contributorPartner}: A৳{Number(c.approvedFund).toFixed(2)} / R৳
-                                {Number(c.revisedFund || 0).toFixed(2)}
-                              </span>
-                            ))}
-                          </div>
+                        <td className="fw-semibold text-dark">{item.projectName || "—"}</td>
+                        <td>{item.devPartnerName || "—"}</td>
+                        <td className="fw-semibold text-success">
+                          ৳ {Number(item.totalApprovedFund || 0).toFixed(2)}
                         </td>
                         <td className="fw-semibold text-success">
-                          ৳ {Number(item.totalApprovedFund || 0).toFixed(2)} Lakhs
+                          ৳ {Number(item.totalRevisedFund || 0).toFixed(2)}
                         </td>
-                        <td className="fw-semibold text-success">
-                          ৳ {Number(item.totalRevisedFund || 0).toFixed(2)} Lakhs
-                        </td>
-                        
                         <td>
                           <small className="text-muted d-block">{formatDateTime(item.createdAt)}</small>
-                          <small className="text-muted">by {item.createdBy || "—"}</small>
-                        </td>
-                        <td>
-                          <small className="text-muted d-block">{formatDateTime(item.updatedAt)}</small>
-                          <small className="text-muted">by {item.updatedBy || "—"}</small>
                         </td>
                         <td className="text-end">
                           <div className="btn-group btn-group-sm">
                             <button
                               onClick={() => setViewFinance(item)}
                               className="btn btn-outline-secondary"
-                              title="View Breakdown"
+                              title="View Record"
                             >
                               <Eye size={14} />
                             </button>
@@ -686,7 +634,7 @@ function Finance() {
         </div>
       </div>
 
-      {/* ---------------- Print Table Format ---------------- */}
+      {/* ---------------- Print View ---------------- */}
       <div className="d-none d-print-block">
         <h4 className="fw-bold mb-1">Project Financial Report</h4>
         <p className="text-muted small mb-3">
@@ -696,44 +644,28 @@ function Finance() {
           <thead>
             <tr>
               <th>Project Name</th>
-              <th>Approved Budget</th>
-              <th>Revised Budget</th>
-              <th>Contributor Partners (Approved / Revised)</th>
-              <th>Approved Fund Received</th>
-              <th>Revised Fund Received</th>
-              <th>Created At</th>
-              <th>Created By</th>
+              <th>Development Partner</th>
+              <th>Approved Contribution (Lakhs TK)</th>
+              <th>Revised Contribution (Lakhs TK)</th>
             </tr>
           </thead>
           <tbody>
             {filteredFinances.map((item) => (
               <tr key={item.id}>
-                <td>{item.projectName}</td>
-                <td>৳ {Number(item.projectApprovedBudget || 0).toFixed(2)} Lakhs</td>
-                <td>{item.projectRevisedBudget != null ? `৳ ${Number(item.projectRevisedBudget).toFixed(2)} Lakhs` : "—"}</td>
-                <td>
-                  {item.contributors
-                    .map(
-                      (c) =>
-                        `${c.contributorPartner} (A:৳${Number(c.approvedFund).toFixed(2)} / R:৳${Number(
-                          c.revisedFund || 0
-                        ).toFixed(2)})`
-                    )
-                    .join(", ")}
-                </td>
-                <td>৳ {Number(item.totalApprovedFund || 0).toFixed(2)} Lakhs</td>
-                <td>৳ {Number(item.totalRevisedFund || 0).toFixed(2)} Lakhs</td>
-                <td>{item.createdBy || "—"}</td>
+                <td>{item.projectName || "—"}</td>
+                <td>{item.devPartnerName || "—"}</td>
+                <td>৳ {Number(item.totalApprovedFund || 0).toFixed(2)}</td>
+                <td>৳ {Number(item.totalRevisedFund || 0).toFixed(2)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {/* ---------------- Detail View Modal ---------------- */}
+      {/* ---------------- Modal ---------------- */}
       {viewFinance && (
         <div className="modal fade show d-block d-print-none" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
-          <div className="modal-dialog modal-lg modal-dialog-centered">
+          <div className="modal-dialog modal-md modal-dialog-centered">
             <div className="modal-content border-0 shadow">
               <div className="modal-header bg-light">
                 <h5 className="modal-title fw-bold text-primary">{viewFinance.projectName}</h5>
@@ -741,74 +673,30 @@ function Finance() {
               </div>
 
               <div className="modal-body p-4">
-                <h6 className="fw-bold text-muted mb-2">Development Partner Contributions</h6>
-                <div className="table-responsive mb-4">
-                  <table className="table table-bordered table-sm mb-0">
-                    <thead className="table-light">
-                      <tr>
-                        <th>Contributor Partner</th>
-                        <th>Approved Fund</th>
-                        <th>Revised Fund</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {viewFinance.contributors.map((c, i) => (
-                        <tr key={i}>
-                          <td>{c.contributorPartner}</td>
-                          <td>৳ {Number(c.approvedFund).toFixed(2)} Lakhs</td>
-                          <td>৳ {Number(c.revisedFund || 0).toFixed(2)} Lakhs</td>
-                        </tr>
-                      ))}
-                      <tr className="table-light fw-bold">
-                        <td>Total Received</td>
-                        <td>৳ {Number(viewFinance.totalApprovedFund || 0).toFixed(2)} Lakhs</td>
-                        <td>৳ {Number(viewFinance.totalRevisedFund || 0).toFixed(2)} Lakhs</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                <h6 className="fw-bold text-muted mb-2">Disbursement Information</h6>
-                <div className="row g-3 mb-4">
-                  <div className="col-md-6">
-                    <strong className="d-block text-muted small">Project Approved Budget</strong>
-                    <span>৳ {Number(viewFinance.projectApprovedBudget || 0).toFixed(2)} Lakhs</span>
+                <div className="row g-3">
+                  <div className="col-12">
+                    <strong className="d-block text-muted small">Development Partner</strong>
+                    <span>{viewFinance.devPartnerName || "N/A"}</span>
                   </div>
-                  <div className="col-md-6">
-                    <strong className="d-block text-muted small">Project Revised Budget</strong>
-                    <span>
-                      {viewFinance.projectRevisedBudget != null
-                        ? `৳ ${Number(viewFinance.projectRevisedBudget).toFixed(2)} Lakhs`
-                        : "—"}
+                  <div className="col-6">
+                    <strong className="d-block text-muted small">Approved Contribution (Lakhs TK)</strong>
+                    <span className="text-success fw-bold">
+                      ৳ {Number(viewFinance.totalApprovedFund || 0).toFixed(2)}
                     </span>
                   </div>
-                  <div className="col-md-6">
-                    <strong className="d-block text-muted small">Fiscal Year</strong>
-                    <span>{viewFinance.fiscalYear}</span>
+                  <div className="col-6">
+                    <strong className="d-block text-muted small">Revised Contribution (Lakhs TK)</strong>
+                    <span className="text-success fw-bold">
+                      ৳ {Number(viewFinance.totalRevisedFund || 0).toFixed(2)}
+                    </span>
                   </div>
-                  <div className="col-md-6">
-                    <strong className="d-block text-muted small">Disbursement Date</strong>
-                    <span>{formatDate(viewFinance.disbursementDate)}</span>
-                  </div>
-                </div>
-
-                <h6 className="fw-bold text-muted mb-2">Record Audit Trail</h6>
-                <div className="row g-3">
-                  <div className="col-md-6">
+                  <div className="col-6">
                     <strong className="d-block text-muted small">Created At</strong>
                     <span>{formatDateTime(viewFinance.createdAt)}</span>
                   </div>
-                  <div className="col-md-6">
-                    <strong className="d-block text-muted small">Created By</strong>
-                    <span>{viewFinance.createdBy || "—"}</span>
-                  </div>
-                  <div className="col-md-6">
+                  <div className="col-6">
                     <strong className="d-block text-muted small">Updated At</strong>
                     <span>{formatDateTime(viewFinance.updatedAt)}</span>
-                  </div>
-                  <div className="col-md-6">
-                    <strong className="d-block text-muted small">Updated By</strong>
-                    <span>{viewFinance.updatedBy || "—"}</span>
                   </div>
                 </div>
               </div>
@@ -825,4 +713,5 @@ function Finance() {
     </div>
   );
 }
- export default Finance;
+
+export default Finance;
