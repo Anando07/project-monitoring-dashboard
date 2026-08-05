@@ -12,6 +12,7 @@ import {
   Briefcase,
   Loader,
   Pencil,
+  RotateCcw,
 } from "lucide-react";
 
 import {
@@ -402,11 +403,17 @@ function FinancialProgress() {
                     Editing Record ID: #{formData.id}
                   </span>
                 )}
-                {isEditing && (
-                  <button type="button" className="btn btn-outline-secondary" onClick={handleCancelEdit}>
-                    Cancel
-                  </button>
-                )}
+                
+                {/* Cancel / Reset Button */}
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary d-inline-flex align-items-center gap-1"
+                  onClick={handleCancelEdit}
+                >
+                  <RotateCcw size={15} />
+                  {isEditing ? "Cancel" : "Reset"}
+                </button>
+
                 <button type="submit" className="btn btn-primary d-inline-flex align-items-center gap-1">
                   {isEditing ? <Pencil size={16} /> : <Plus size={16} />}
                   {isEditing ? "Update Expense Record" : "Add Expense Record"}
