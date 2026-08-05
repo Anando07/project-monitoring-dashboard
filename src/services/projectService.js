@@ -1,43 +1,56 @@
-import axios from "axios";
-
-// Base API Endpoint
-const API_BASE_URL = "http://localhost:8080/api";
-
-// Endpoint URLs
-const REST_PROJECT_API_BASE_URL = `${API_BASE_URL}/projects`;
-const REST_MINISTRY_API_BASE_URL = `${API_BASE_URL}/ministries`;
-const REST_DIRECTORATE_API_BASE_URL = `${API_BASE_URL}/directorates`;
+import api from "./api";
 
 // ==========================================
 // Projects API Calls
 // ==========================================
-export const getAllProjects = () => axios.get(REST_PROJECT_API_BASE_URL);
 
-export const getProjectById = (id) => axios.get(`${REST_PROJECT_API_BASE_URL}/${id}`);
+// Get all projects
+export const getAllProjects = () =>
+    api.get("/projects");
 
+// Get project by ID
+export const getProjectById = (id) =>
+    api.get(`/projects/${id}`);
+
+// Create project
 export const createProject = async (project) => {
     try {
-        const response = await axios.post(REST_PROJECT_API_BASE_URL, project);
+        const response = await api.post("/projects", project);
         return response;
     } catch (error) {
-        console.log("Status:", error.response?.status);
-        console.log("Response:", error.response?.data);
-        console.log("Request:", project);
+        console.error("Status:", error.response?.status);
+        console.error("Response:", error.response?.data);
+        console.error("Request:", project);
         throw error;
     }
 };
 
-export const updateProject = (id, project) => axios.put(`${REST_PROJECT_API_BASE_URL}/${id}`, project);
+// Update project
+export const updateProject = (id, project) =>
+    api.put(`/projects/${id}`, project);
 
-export const deleteProject = (id) => axios.delete(`${REST_PROJECT_API_BASE_URL}/${id}`);
+// Delete project
+export const deleteProject = (id) =>
+    api.delete(`/projects/${id}`);
+
 
 // ==========================================
-// Ministries & Directorates API Calls
+// Ministries API Calls
 // ==========================================
-export const getAllMinistries = () => axios.get(REST_MINISTRY_API_BASE_URL);
 
-export const getAllDirectorates = () => axios.get(REST_DIRECTORATE_API_BASE_URL);
+// Get all ministries
+export const getAllMinistries = () =>
+    api.get("/ministries");
 
-// Cascading endpoint to fetch directorates by ministry ID
+
+// ==========================================
+// Directorates API Calls
+// ==========================================
+
+// Get all directorates
+export const getAllDirectorates = () =>
+    api.get("/directorates");
+
+// Get directorates by ministry ID
 export const getDirectoratesByMinistry = (ministryId) =>
-  axios.get(`${REST_DIRECTORATE_API_BASE_URL}/ministry/${ministryId}`);
+    api.get(`/directorates/ministry/${ministryId}`);

@@ -1,22 +1,29 @@
-import axios from "axios";
+import api from "./api";
 
-const REST_DIRECTORATE_API_BASE_URL = "http://localhost:8080/api/directorates";
+// ==========================================
+// Directorate API Calls
+// ==========================================
 
-// Fetch all directorates
-export const getAllDirectorates = () => axios.get(REST_DIRECTORATE_API_BASE_URL);
+// Get all directorates
+export const getAllDirectorates = () =>
+    api.get("/directorates");
 
-// Fetch directorates belonging to a specific ministry
+// Get directorates by ministry ID
 export const getDirectoratesByMinistryApi = (ministryId) =>
-  axios.get(`${REST_DIRECTORATE_API_BASE_URL}/ministry/${ministryId}`);
+    api.get(`/directorates/ministry/${ministryId}`);
 
-// Create a new directorate under a ministry
+// Get directorate by ID (Optional)
+export const getDirectorateById = (id) =>
+    api.get(`/directorates/${id}`);
+
+// Create directorate
 export const createDirectorateApi = (directorateData) =>
-  axios.post(REST_DIRECTORATE_API_BASE_URL, directorateData);
+    api.post("/directorates", directorateData);
 
-// Update an existing directorate record by ID
+// Update directorate
 export const updateDirectorateApi = (id, directorateData) =>
-  axios.put(`${REST_DIRECTORATE_API_BASE_URL}/${id}`, directorateData);
+    api.put(`/directorates/${id}`, directorateData);
 
-// Delete a directorate record
+// Delete directorate
 export const deleteDirectorateApi = (id) =>
-  axios.delete(`${REST_DIRECTORATE_API_BASE_URL}/${id}`);
+    api.delete(`/directorates/${id}`);

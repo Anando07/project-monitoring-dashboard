@@ -1,18 +1,21 @@
-import axios from "axios";
+import api from "./api";
 
-const REST_PASSCODE_API_BASE_URL = "http://localhost:8080/api/passcodes";
+// Get all passcodes
+export const getAllPasscodes = () =>
+    api.get("/passcodes");
 
-// Fetch all passcodes / password records
-export const getAllPasscodes = () => axios.get(REST_PASSCODE_API_BASE_URL);
+// Get passcode by ID
+export const getPasscodeById = (id) =>
+    api.get(`/passcodes/${id}`);
 
-// Create passcode for a user
+// Create passcode
 export const createPasscodeApi = (passcodeData) =>
-  axios.post(REST_PASSCODE_API_BASE_URL, passcodeData);
+    api.post("/passcodes", passcodeData);
 
-// Update an existing passcode record by ID
+// Update passcode
 export const updatePasscodeApi = (id, passcodeData) =>
-  axios.put(`${REST_PASSCODE_API_BASE_URL}/${id}`, passcodeData);
+    api.put(`/passcodes/${id}`, passcodeData);
 
-// Delete passcode record
+// Delete passcode
 export const deletePasscodeApi = (id) =>
-  axios.delete(`${REST_PASSCODE_API_BASE_URL}/${id}`);
+    api.delete(`/passcodes/${id}`);

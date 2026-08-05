@@ -9,6 +9,7 @@ import Dashboard from "../pages/Dashboard";
 import Projects from "../pages/Projects/Projects";
 import Director from "../pages/Projects/Director";
 import Finance from "../pages/Projects/Finance";
+import DevelopmentPartner from "../pages/Projects/DevelopmentPartner";
 import FinancialProgress from "../pages/Projects/FinancialProgress";
 import PhysicalProgress from "../pages/Projects/PhysicalProgress";
 import Reports from "../pages/Reports";
@@ -34,6 +35,7 @@ const AppRoutes = () => {
         <Route element={<ProtectedRoute />}>
           {/* Project Management */}
           <Route path="projects/create" element={<Projects />} />
+          <Route path="projects/development/partner" element={<DevelopmentPartner />} />
           <Route path="projects/finance" element={<Finance />} />
           <Route path="projects/director" element={<Director />} />
           <Route path="projects/financial/progress" element={<FinancialProgress />} />

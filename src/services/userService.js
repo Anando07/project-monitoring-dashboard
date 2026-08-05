@@ -1,21 +1,52 @@
-import axios from "axios";
+import api from "./api";
 
-const REST_USER_API_BASE_URL = "http://localhost:8080/api/users";
-const REST_ROLE_API_BASE_URL = "http://localhost:8080/api/roles";
-const REST_PASSCODE_API_BASE_URL = "http://localhost:8080/api/passcodes";
-const REST_MINISTRY_API_BASE_URL = "http://localhost:8080/api/ministries";
-
+// ==========================================
 // User API Calls
-export const getAllUsers = () => axios.get(REST_USER_API_BASE_URL);
-export const createUserApi = (user) => axios.post(REST_USER_API_BASE_URL, user);
-export const updateUserApi = (id, user) => axios.put(`${REST_USER_API_BASE_URL}/${id}`, user);
-export const deleteUserApi = (id) => axios.delete(`${REST_USER_API_BASE_URL}/${id}`);
+// ==========================================
 
+// Get all users
+export const getAllUsers = () =>
+    api.get("/users");
+
+// Get user by ID
+export const getUserById = (id) =>
+    api.get(`/users/${id}`);
+
+// Create user
+export const createUserApi = (user) =>
+    api.post("/users", user);
+
+// Update user
+export const updateUserApi = (id, user) =>
+    api.put(`/users/${id}`, user);
+
+// Delete user
+export const deleteUserApi = (id) =>
+    api.delete(`/users/${id}`);
+
+
+// ==========================================
 // Role API Calls
-export const getAllRoles = () => axios.get(REST_ROLE_API_BASE_URL);
+// ==========================================
 
+// Get all roles
+export const getAllRoles = () =>
+    api.get("/roles");
+
+
+// ==========================================
 // Passcode API Calls
-export const getAllPasscodes = () => axios.get(REST_PASSCODE_API_BASE_URL);
+// ==========================================
 
+// Get all passcodes
+export const getAllPasscodes = () =>
+    api.get("/passcodes");
+
+
+// ==========================================
 // Ministry API Calls
-export const getAllMinistries = () => axios.get(REST_MINISTRY_API_BASE_URL);
+// ==========================================
+
+// Get all ministries
+export const getAllMinistries = () =>
+    api.get("/ministries");
