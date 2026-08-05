@@ -1,5 +1,4 @@
-import React, { useState, useMemo } from "react";
-import "./PhysicalProgress.css";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   Search,
@@ -9,76 +8,202 @@ import {
   Eye,
   Activity,
   AlertCircle,
-  FileText,
-  X,
   Briefcase,
-  Calendar
+  RotateCcw,
+  Loader,
+  Layers,
+  Target,
+  TrendingUp,
+  CheckCircle2,
+  PieChart,
 } from "lucide-react";
 
-// Predefined Projects List
-const EXISTING_PROJECTS = [
-  { id: "p1", name: "Highway Expansion Phase 2" },
-  { id: "p2", name: "Metro Rail Line Extension" },
-  { id: "p3", name: "Smart City Fiber Network" },
-  { id: "p4", name: "Central Water Treatment Facility" }
-];
-
-const INITIAL_FORM_STATE = {
-  id: null,
-  projectId: "",
-  projectName: "",
-  completedQty: "",
-  workDetails: "",
-  progressDate: new Date().toISOString().split("T")[0]
-};
-
-const INITIAL_PROGRESS_RECORDS = [
-  {
-    id: 1,
-    projectId: "p1",
-    projectName: "Highway Expansion Phase 2",
-    completedQty: 45,
-    workDetails: "Asphalt laying completed for Section A & B",
-    progressDate: "2026-07-15"
-  },
-  {
-    id: 2,
-    projectId: "p2",
-    projectName: "Metro Rail Line Extension",
-    completedQty: 80,
-    workDetails: "Concrete foundation and pillar casting for Sector 4",
-    progressDate: "2026-07-20"
-  }
-];
+import { getAllProjects } from "../../services/ProjectService";
+import {
+  getAllPhysicalProgress,
+  createPhysicalProgress,
+  updatePhysicalProgress,
+  deletePhysicalProgress,
+  getProjectWorkParameters,
+  saveProjectWorkParameters,
+} from "../../services/PhysicalProgressService";
 
 function PhysicalProgress() {
-  const [records, setRecords] = useState(INITIAL_PROGRESS_RECORDS);
-  const [formData, setFormData] = useState(INITIAL_FORM_STATE);
+  const [projects, setProjects] = useState([]);
+  const [progressRecords, setProgressRecords] = useState([]);
+  const [activeProjectParameters, setActiveProjectParameters] = useState([]);
+
+  const [activeTab, setActiveTab] = useState("LOG_PROGRESS");
+  const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState(null);
+
+  // Stage 1: Target Setup State
+  const [targetProjectId, setTargetProjectId] = useState("");
+  const [targetParameters, setTargetParameters] = useState([
+    { parameterName: "", weightagePercentage: "" },
+  ]);
+  const [targetErrors, setTargetErrors] = useState({});
+
+  // Stage 2: Logging Form State
+  const [formData, setFormData] = useState({
+    id: null,
+    projectId: "",
+    projectName: "",
+    progressDate: new Date().toISOString().split("T")[0],
+    projectWorkParameterId: "",
+    completedPercentage: "",
+    remarks: "",
+  });
   const [errors, setErrors] = useState({});
   const [isEditing, setIsEditing] = useState(false);
 
-  // Search & Modal States
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedProjectFilter, setSelectedProjectFilter] = useState("");
   const [viewItem, setViewItem] = useState(null);
 
-  // Handle Project Selection
-  const handleProjectSelect = (e) => {
+  useEffect(() => {
+    fetchInitialData();
+  }, []);
+
+  const fetchInitialData = async () => {
+    setLoading(true);
+    try {
+      const [projRes, progRes] = await Promise.all([
+        getAllProjects().catch(() => ({ data: [] })),
+        getAllPhysicalProgress().catch(() => ({ data: [] })),
+      ]);
+      setProjects(projRes.data || []);
+      setProgressRecords(progRes.data || []);
+    } catch (err) {
+      console.error("Failed to fetch initial data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // STAGE 1: Target Setup Handlers
+  const handleTargetProjectSelect = async (e) => {
+    const pId = e.target.value;
+    setTargetProjectId(pId);
+    setTargetErrors({});
+
+    if (pId) {
+      try {
+        const res = await getProjectWorkParameters(pId);
+        if (res.data && res.data.length > 0) {
+          setTargetParameters(
+            res.data.map((item) => ({
+              parameterName: item.parameterName,
+              weightagePercentage: String(item.weightagePercentage),
+            }))
+          );
+        } else {
+          setTargetParameters([{ parameterName: "", weightagePercentage: "" }]);
+        }
+      } catch (err) {
+        setTargetParameters([{ parameterName: "", weightagePercentage: "" }]);
+      }
+    } else {
+      setTargetParameters([{ parameterName: "", weightagePercentage: "" }]);
+    }
+  };
+
+  const handleAddTargetRow = () => {
+    setTargetParameters((prev) => [
+      ...prev,
+      { parameterName: "", weightagePercentage: "" },
+    ]);
+  };
+
+  const handleRemoveTargetRow = (index) => {
+    setTargetParameters((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleTargetChange = (index, field, value) => {
+    const updated = [...targetParameters];
+    updated[index][field] = value;
+    setTargetParameters(updated);
+  };
+
+  const validateTargets = () => {
+    const errs = {};
+    if (!targetProjectId) errs.targetProjectId = "Select a project.";
+
+    const rowErrs = [];
+    let totalPct = 0;
+
+    targetParameters.forEach((param, idx) => {
+      const rErr = {};
+      if (!param.parameterName || !param.parameterName.trim()) {
+        rErr.parameterName = "Parameter name is required.";
+      }
+      const val = parseFloat(param.weightagePercentage);
+      if (isNaN(val) || val <= 0 || val > 100) {
+        rErr.weightagePercentage = "Invalid target %";
+      } else {
+        totalPct += val;
+      }
+      if (Object.keys(rErr).length > 0) rowErrs[idx] = rErr;
+    });
+
+    if (rowErrs.length > 0) errs.rowErrs = rowErrs;
+    if (Math.abs(totalPct - 100) > 0.01) {
+      errs.total = `Total target weightage must sum to 100%. Current: ${totalPct.toFixed(1)}%`;
+    }
+
+    setTargetErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleSaveTargets = async (e) => {
+    e.preventDefault();
+    if (!validateTargets()) return;
+
+    const payload = targetParameters.map((p) => ({
+      parameterName: p.parameterName.trim(),
+      weightagePercentage: Number(p.weightagePercentage),
+    }));
+
+    try {
+      await saveProjectWorkParameters(targetProjectId, payload);
+      alert("Parameter target configuration saved to database successfully!");
+
+      if (String(formData.projectId) === String(targetProjectId)) {
+        const refreshed = await getProjectWorkParameters(targetProjectId);
+        setActiveProjectParameters(refreshed.data || []);
+      }
+
+      setActiveTab("LOG_PROGRESS");
+    } catch (err) {
+      const msg = err.response?.data?.message || "Failed to save configuration.";
+      alert(msg);
+    }
+  };
+
+  // STAGE 2: Progress Logging Handlers
+  const handleProgressProjectSelect = async (e) => {
     const selectedId = e.target.value;
-    const project = EXISTING_PROJECTS.find((p) => p.id === selectedId);
+    const project = projects.find((p) => String(p.id) === String(selectedId));
 
     if (project) {
       setFormData((prev) => ({
         ...prev,
-        projectId: project.id,
-        projectName: project.name
+        projectId: String(project.id),
+        projectName: project.projectName,
+        projectWorkParameterId: "",
+        completedPercentage: "",
       }));
+
+      try {
+        const res = await getProjectWorkParameters(project.id);
+        setActiveProjectParameters(res.data || []);
+      } catch (err) {
+        setActiveProjectParameters([]);
+      }
+
       if (errors.projectId) setErrors((prev) => ({ ...prev, projectId: null }));
     } else {
-      setFormData((prev) => ({
-        ...prev,
-        projectId: "",
-        projectName: ""
-      }));
+      handleCancelReset();
     }
   };
 
@@ -88,339 +213,743 @@ function PhysicalProgress() {
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }));
   };
 
-  // Form Validation
-  const validateForm = () => {
+  // Fetch parameter object matching selected ID
+  const selectedParameterObj = useMemo(() => {
+    if (!formData.projectWorkParameterId || activeProjectParameters.length === 0) return null;
+    return activeProjectParameters.find(
+      (p) => String(p.id) === String(formData.projectWorkParameterId)
+    );
+  }, [formData.projectWorkParameterId, activeProjectParameters]);
+
+  const currentTargetWeightage = useMemo(() => {
+    return selectedParameterObj ? Number(selectedParameterObj.weightagePercentage || 0) : 0;
+  }, [selectedParameterObj]);
+
+  const currentAlreadyCompleted = useMemo(() => {
+    return selectedParameterObj ? Number(selectedParameterObj.alreadyCompletedPercentage || 0) : 0;
+  }, [selectedParameterObj]);
+
+  const maxAllowedGain = useMemo(() => {
+    return Math.max(0, currentTargetWeightage - currentAlreadyCompleted);
+  }, [currentTargetWeightage, currentAlreadyCompleted]);
+
+  const validateProgressForm = () => {
     const newErrors = {};
     if (!formData.projectId) newErrors.projectId = "Please select a project.";
+    if (!formData.progressDate) newErrors.progressDate = "Date is required.";
+    if (!formData.projectWorkParameterId) newErrors.projectWorkParameterId = "Please select a parameter.";
 
-    const qty = parseFloat(formData.completedQty);
-    if (!formData.completedQty || qty <= 0) {
-      newErrors.completedQty = "Enter a valid completed quantity.";
-    }
-
-    if (!formData.workDetails.trim()) {
-      newErrors.workDetails = "Details of completed work are required.";
+    const pct = parseFloat(formData.completedPercentage);
+    if (isNaN(pct) || pct <= 0) {
+      newErrors.completedPercentage = "Enter a valid positive percentage.";
+    } else if (formData.projectWorkParameterId && pct > maxAllowedGain) {
+      newErrors.completedPercentage = `Exceeds limit! Max gain allowed is ${maxAllowedGain.toFixed(2)}%`;
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmitProgress = async (e) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    if (!validateProgressForm()) return;
 
-    if (isEditing) {
-      setRecords((prev) =>
-        prev.map((item) =>
-          item.id === formData.id
-            ? {
-                ...formData,
-                completedQty: parseFloat(formData.completedQty)
-              }
-            : item
-        )
-      );
-      setIsEditing(false);
-    } else {
-      const newRecord = {
-        ...formData,
-        id: Date.now(),
-        completedQty: parseFloat(formData.completedQty)
-      };
-      setRecords((prev) => [newRecord, ...prev]);
+    setFormError(null);
+    const payload = {
+      projectId: Number(formData.projectId),
+      projectWorkParameterId: Number(formData.projectWorkParameterId),
+      progressDate: formData.progressDate,
+      completedPercentage: Number(formData.completedPercentage),
+      remarks: formData.remarks ? formData.remarks.trim() : "",
+    };
+
+    try {
+      if (isEditing) {
+        const res = await updatePhysicalProgress(formData.id, payload);
+        setProgressRecords((prev) =>
+          prev.map((item) => (item.id === formData.id ? res.data : item))
+        );
+      } else {
+        const res = await createPhysicalProgress(payload);
+        setProgressRecords((prev) => [res.data, ...prev]);
+      }
+      handleCancelReset();
+    } catch (err) {
+      const msg = err.response?.data?.message || "Failed to save record.";
+      setFormError(msg);
     }
-
-    setFormData(INITIAL_FORM_STATE);
   };
 
-  const handleEdit = (item) => {
-    setFormData({ ...item });
+  const handleEdit = async (item) => {
+    if (item.projectId) {
+      try {
+        const res = await getProjectWorkParameters(item.projectId);
+        setActiveProjectParameters(res.data || []);
+      } catch (err) {
+        setActiveProjectParameters([]);
+      }
+    }
+
+    setFormData({
+      id: item.id,
+      projectId: String(item.projectId),
+      projectName: item.projectName,
+      progressDate: item.progressDate,
+      projectWorkParameterId: String(item.projectWorkParameterId),
+      completedPercentage: String(item.completedPercentage),
+      remarks: item.remarks || "",
+    });
     setIsEditing(true);
+    setActiveTab("LOG_PROGRESS");
     setErrors({});
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleDelete = (id) => {
-    if (window.confirm("Are you sure you want to delete this physical progress record?")) {
-      setRecords((prev) => prev.filter((item) => item.id !== id));
-      if (formData.id === id) {
-        setFormData(INITIAL_FORM_STATE);
-        setIsEditing(false);
-      }
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this physical progress record?")) return;
+    try {
+      await deletePhysicalProgress(id);
+      setProgressRecords((prev) => prev.filter((item) => item.id !== id));
+      if (formData.id === id) handleCancelReset();
+    } catch (err) {
+      alert("Failed to delete record.");
     }
   };
 
-  const handleCancelEdit = () => {
-    setFormData(INITIAL_FORM_STATE);
+  const handleCancelReset = () => {
+    setFormData({
+      id: null,
+      projectId: "",
+      projectName: "",
+      progressDate: new Date().toISOString().split("T")[0],
+      projectWorkParameterId: "",
+      completedPercentage: "",
+      remarks: "",
+    });
+    setActiveProjectParameters([]);
     setIsEditing(false);
     setErrors({});
+    setFormError(null);
   };
 
-  // Filtered List based on search
+  const handlePrint = () => {
+    const printWindow = window.open("", "_blank", "width=900,height=650");
+    if (!printWindow) return;
+
+    const rowsHtml = filteredRecords
+      .map(
+        (rec) => `
+        <tr>
+          <td><strong>${rec.projectName || "—"}</strong></td>
+          <td>${rec.progressDate}</td>
+          <td>${rec.parameterName}</td>
+          <td style="color:#198754; font-weight:bold;">+${rec.completedPercentage}%</td>
+          <td>${rec.remarks || "—"}</td>
+        </tr>
+      `
+      )
+      .join("");
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Physical Progress Ledger</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; color: #212529; }
+            h2 { margin-bottom: 5px; }
+            p { font-size: 12px; color: #6c757d; margin-top: 0; margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th, td { border: 1px solid #dee2e6; padding: 8px 10px; text-align: left; font-size: 12px; }
+            th { background-color: #212529; color: #fff; }
+            tr:nth-child(even) { background-color: #f8f9fa; }
+          </style>
+        </head>
+        <body>
+          <h2>Physical Progress Reports</h2>
+          <p>Generated on: ${new Date().toLocaleDateString()} | Records: ${filteredRecords.length}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Project Name</th>
+                <th>Progress Date</th>
+                <th>Parameter Name</th>
+                <th>Gain (%)</th>
+                <th>Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml.length > 0 ? rowsHtml : '<tr><td colspan="5" style="text-align:center;">No records available</td></tr>'}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  };
+
   const filteredRecords = useMemo(() => {
-    return records.filter((item) => {
-      return (
-        item.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.workDetails.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+    return progressRecords.filter((item) => {
+      const q = searchTerm.toLowerCase().trim();
+      const matchesSearch =
+        (item.projectName || "").toLowerCase().includes(q) ||
+        (item.parameterName || "").toLowerCase().includes(q) ||
+        (item.remarks || "").toLowerCase().includes(q);
+      const matchesProject = selectedProjectFilter
+        ? String(item.projectId) === selectedProjectFilter
+        : true;
+      return matchesSearch && matchesProject;
     });
-  }, [records, searchTerm]);
+  }, [progressRecords, searchTerm, selectedProjectFilter]);
 
   return (
-    <div className="dashboard-page">
-      {/* Physical Work Input Form */}
-      <div className="dashboard-card no-print">
-        <div className="dashboard-card-header">
-          <h3>{isEditing ? "Edit Physical Progress" : "Record Physical Progress"}</h3>
-          <Activity className="card-action-icon" size={20} />
-        </div>
-
-        <form onSubmit={handleSubmit} className="project-form">
-          <div className="form-grid form-grid-2">
-            {/* Project Dropdown */}
-            <div className="form-group">
-              <label>
-                Select Project <span className="req-star">*</span>
-              </label>
-              <select
-                name="projectId"
-                value={formData.projectId}
-                onChange={handleProjectSelect}
-                className={errors.projectId ? "input-error" : ""}
-              >
-                <option value="">-- Choose Project --</option>
-                {EXISTING_PROJECTS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              {errors.projectId && <span className="field-error">{errors.projectId}</span>}
-            </div>
-
-            {/* Completed Quantity */}
-            <div className="form-group">
-              <label>
-                Completed Quantity / Progress Amount <span className="req-star">*</span>
-              </label>
-              <input
-                type="number"
-                name="completedQty"
-                placeholder="e.g. 25"
-                value={formData.completedQty}
-                onChange={handleInputChange}
-                className={errors.completedQty ? "input-error" : ""}
-              />
-              {errors.completedQty && <span className="field-error">{errors.completedQty}</span>}
-            </div>
-          </div>
-
-          {/* Details of Physical Work Done */}
-          <div className="form-group">
-            <label>
-              Work Progress Details / Description <span className="req-star">*</span>
-            </label>
-            <input
-              type="text"
-              name="workDetails"
-              placeholder="e.g. Excavation complete, 500m cabling installed..."
-              value={formData.workDetails}
-              onChange={handleInputChange}
-              className={errors.workDetails ? "input-error" : ""}
-            />
-            {errors.workDetails && <span className="field-error">{errors.workDetails}</span>}
-          </div>
-
-          {/* Form Actions */}
-          <div className="form-actions">
-            {isEditing && <span className="editing-badge">Editing Record #{formData.id}</span>}
-            {isEditing && (
-              <button type="button" onClick={handleCancelEdit} className="button-secondary">
-                Cancel
-              </button>
-            )}
-            <button type="submit" className="button-primary">
-              <Plus size={16} /> {isEditing ? "Update Record" : "Add Physical Record"}
-            </button>
-          </div>
-        </form>
+    <div className="container-fluid py-4 bg-light min-vh-100">
+      {/* Navigation Tabs */}
+      <div className="d-flex gap-2 mb-3 d-print-none">
+        <button
+          className={`btn ${activeTab === "LOG_PROGRESS" ? "btn-primary" : "btn-outline-primary"} d-inline-flex align-items-center gap-1`}
+          onClick={() => setActiveTab("LOG_PROGRESS")}
+        >
+          <TrendingUp size={16} /> Log Physical Progress
+        </button>
+        <button
+          className={`btn ${activeTab === "SET_TARGETS" ? "btn-primary" : "btn-outline-primary"} d-inline-flex align-items-center gap-1`}
+          onClick={() => setActiveTab("SET_TARGETS")}
+        >
+          <Target size={16} /> Configure Parameter Targets
+        </button>
       </div>
 
-      {/* Physical Progress Table Ledger */}
-      <div className="dashboard-card no-print">
-        <div className="dashboard-card-header">
-          <h3>Physical Work Progress Ledger</h3>
-          <div className="header-actions">
-            <div className="search-box">
-              <Search size={14} className="search-icon" />
+      {/* STAGE 1: TARGET CONFIGURATION */}
+      {activeTab === "SET_TARGETS" && (
+        <div className="card shadow-sm border-0 mb-4 d-print-none">
+          <div className="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
+            <h5 className="mb-0 text-primary fw-bold">Define Parameter Targets (Baseline)</h5>
+            <Target className="text-primary" size={20} />
+          </div>
+
+          <div className="card-body p-4">
+            <form onSubmit={handleSaveTargets} noValidate>
+              <div className="row g-3">
+                <div className="col-md-12">
+                  <label className="form-label fw-semibold">
+                    Select Project <span className="text-danger">*</span>
+                  </label>
+                  <select
+                    value={targetProjectId}
+                    onChange={handleTargetProjectSelect}
+                    className={`form-select ${targetErrors.targetProjectId ? "is-invalid" : ""}`}
+                  >
+                    <option value="">-- Choose Project --</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.projectName}
+                      </option>
+                    ))}
+                  </select>
+                  {targetErrors.targetProjectId && (
+                    <div className="invalid-feedback">{targetErrors.targetProjectId}</div>
+                  )}
+                </div>
+
+                {targetProjectId && (
+                  <div className="col-12 mt-4">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <label className="form-label fw-semibold mb-0 d-flex align-items-center gap-1">
+                        <Layers size={16} /> Work Parameters Target Breakdown (Must Sum to 100%)
+                      </label>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1"
+                        onClick={handleAddTargetRow}
+                      >
+                        <Plus size={14} /> Add Parameter Row
+                      </button>
+                    </div>
+
+                    {targetErrors.total && (
+                      <div className="alert alert-warning py-2 px-3 small mb-3">
+                        {targetErrors.total}
+                      </div>
+                    )}
+
+                    {targetParameters.map((param, index) => {
+                      const rowErr = targetErrors.rowErrs?.[index] || {};
+                      return (
+                        <div
+                          key={index}
+                          className="row g-2 align-items-start mb-2 p-2 bg-white border rounded"
+                        >
+                          <div className="col-md-7">
+                            <input
+                              type="text"
+                              placeholder="Parameter Name (e.g., Piling, Deck Slab, Excavation)"
+                              value={param.parameterName}
+                              onChange={(e) =>
+                                handleTargetChange(index, "parameterName", e.target.value)
+                              }
+                              className={`form-control form-control-sm ${
+                                rowErr.parameterName ? "is-invalid" : ""
+                              }`}
+                            />
+                            {rowErr.parameterName && (
+                              <div className="invalid-feedback">{rowErr.parameterName}</div>
+                            )}
+                          </div>
+
+                          <div className="col-md-3">
+                            <div className="input-group input-group-sm">
+                              <input
+                                type="number"
+                                min="1"
+                                max="100"
+                                step="0.1"
+                                placeholder="Target %"
+                                value={param.weightagePercentage}
+                                onChange={(e) =>
+                                  handleTargetChange(index, "weightagePercentage", e.target.value)
+                                }
+                                className={`form-control ${
+                                  rowErr.weightagePercentage ? "is-invalid" : ""
+                                }`}
+                              />
+                              <span className="input-group-text">%</span>
+                            </div>
+                            {rowErr.weightagePercentage && (
+                              <div className="text-danger small mt-1">{rowErr.weightagePercentage}</div>
+                            )}
+                          </div>
+
+                          <div className="col-md-2 text-end">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger"
+                              onClick={() => handleRemoveTargetRow(index)}
+                              disabled={targetParameters.length === 1}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="col-12 d-flex justify-content-end gap-2 mt-4 pt-2 border-top">
+                  <button
+                    type="submit"
+                    className="btn btn-primary d-inline-flex align-items-center gap-1"
+                  >
+                    <Plus size={16} /> Save Parameter Configuration
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* STAGE 2: LOG PHYSICAL PROGRESS FORM */}
+      {activeTab === "LOG_PROGRESS" && (
+        <div className="card shadow-sm border-0 mb-4 d-print-none">
+          <div className="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
+            <h5 className="mb-0 text-primary fw-bold">
+              {isEditing ? "Edit Physical Progress Record" : "Log Dated Physical Progress"}
+            </h5>
+            <Activity className="text-primary" size={20} />
+          </div>
+
+          <div className="card-body p-4">
+            {formError && (
+              <div className="alert alert-danger d-flex align-items-center gap-2 py-2 px-3 mb-3">
+                <AlertCircle size={16} />
+                <span className="small">{formError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmitProgress} noValidate>
+              <div className="row g-3">
+                {/* Select Project */}
+                <div className="col-md-8">
+                  <label className="form-label fw-semibold">
+                    Select Project <span className="text-danger">*</span>
+                  </label>
+                  <select
+                    name="projectId"
+                    value={formData.projectId}
+                    onChange={handleProgressProjectSelect}
+                    className={`form-select ${errors.projectId ? "is-invalid" : ""}`}
+                  >
+                    <option value="">-- Choose Project --</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.projectName}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.projectId && <div className="invalid-feedback">{errors.projectId}</div>}
+                </div>
+
+                {/* Progress Date */}
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">
+                    Progress Date <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    name="progressDate"
+                    value={formData.progressDate}
+                    onChange={handleInputChange}
+                    className={`form-control ${errors.progressDate ? "is-invalid" : ""}`}
+                  />
+                  {errors.progressDate && (
+                    <div className="invalid-feedback">{errors.progressDate}</div>
+                  )}
+                </div>
+
+                {/* Select Parameter */}
+                <div className="col-md-3">
+                  <label className="form-label fw-semibold">
+                    Parameter Name <span className="text-danger">*</span>
+                  </label>
+                  {formData.projectId ? (
+                    activeProjectParameters.length > 0 ? (
+                      <select
+                        name="projectWorkParameterId"
+                        value={formData.projectWorkParameterId}
+                        onChange={handleInputChange}
+                        className={`form-select ${errors.projectWorkParameterId ? "is-invalid" : ""}`}
+                      >
+                        <option value="">-- Select Parameter --</option>
+                        {activeProjectParameters.map((param) => (
+                          <option key={param.id} value={param.id}>
+                            {param.parameterName}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="alert alert-warning py-2 px-3 mb-0 small d-flex align-items-center justify-content-between">
+                        <span>No parameters configured.</span>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-warning text-dark fw-bold ms-2"
+                          onClick={() => {
+                            setTargetProjectId(formData.projectId);
+                            setActiveTab("SET_TARGETS");
+                          }}
+                        >
+                          Configure
+                        </button>
+                      </div>
+                    )
+                  ) : (
+                    <select className="form-select" disabled>
+                      <option>-- Select Project First --</option>
+                    </select>
+                  )}
+                  {errors.projectWorkParameterId && (
+                    <div className="invalid-feedback d-block">{errors.projectWorkParameterId}</div>
+                  )}
+                </div>
+
+                {/* Display Target Weightage (%) directly from database */}
+                <div className="col-md-3">
+                  <label className="form-label fw-semibold">Target Weightage (%)</label>
+                  <div className="input-group">
+                    <input
+                      type="text"
+                      className="form-control bg-light text-primary fw-bold"
+                      value={formData.projectWorkParameterId ? `${currentTargetWeightage}%` : "—"}
+                      readOnly
+                    />
+                    <span className="input-group-text bg-light border-start-0 text-primary">
+                      <PieChart size={14} />
+                    </span>
+                  </div>
+                </div>
+
+                {/* Display Already Completed (%) directly from database */}
+                <div className="col-md-3">
+                  <label className="form-label fw-semibold">Already Completed (%)</label>
+                  <div className="input-group">
+                    <input
+                      type="text"
+                      className="form-control bg-light text-muted fw-bold"
+                      value={formData.projectWorkParameterId ? `${currentAlreadyCompleted}%` : "—"}
+                      readOnly
+                    />
+                    <span className="input-group-text bg-light border-start-0 text-muted">
+                      <CheckCircle2 size={14} />
+                    </span>
+                  </div>
+                </div>
+
+                {/* New Completed Progress Gain (%) Input */}
+                <div className="col-md-3">
+                  <label className="form-label fw-semibold">
+                    New Progress Gain (%) <span className="text-danger">*</span>
+                  </label>
+                  <div className="input-group">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      max={maxAllowedGain > 0 ? maxAllowedGain : 0}
+                      name="completedPercentage"
+                      placeholder={`Max: ${maxAllowedGain.toFixed(1)}%`}
+                      value={formData.completedPercentage}
+                      onChange={handleInputChange}
+                      className={`form-control ${errors.completedPercentage ? "is-invalid" : ""}`}
+                      disabled={!formData.projectWorkParameterId || maxAllowedGain <= 0}
+                    />
+                    <span className="input-group-text">%</span>
+                  </div>
+                  {errors.completedPercentage && (
+                    <div className="text-danger small mt-1">{errors.completedPercentage}</div>
+                  )}
+                  {formData.projectWorkParameterId && (
+                    <small className="text-muted d-block mt-1">
+                      Max Gain Allowed: <strong>{maxAllowedGain.toFixed(2)}%</strong>
+                    </small>
+                  )}
+                </div>
+
+                {/* Remarks */}
+                <div className="col-12 mt-3">
+                  <label className="form-label fw-semibold">Remarks / Description</label>
+                  <input
+                    type="text"
+                    name="remarks"
+                    placeholder="e.g. Completed section 2 casting..."
+                    value={formData.remarks}
+                    onChange={handleInputChange}
+                    className="form-control"
+                  />
+                </div>
+
+                {/* Form Actions */}
+                <div className="col-12 d-flex justify-content-end gap-2 mt-4 pt-2 border-top">
+                  {isEditing && (
+                    <span className="badge bg-primary-subtle text-primary border me-auto p-2 align-self-center">
+                      Editing Record ID: #{formData.id}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary d-inline-flex align-items-center gap-1"
+                    onClick={handleCancelReset}
+                  >
+                    <RotateCcw size={15} /> {isEditing ? "Cancel" : "Reset"}
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary d-inline-flex align-items-center gap-1"
+                    disabled={formData.projectWorkParameterId && maxAllowedGain <= 0}
+                  >
+                    <Plus size={16} />
+                    {isEditing ? "Update Progress Log" : "Add Progress Log"}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DIRECTORY TABLE */}
+      <div className="card shadow-sm border-0 d-print-none">
+        <div className="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">
+          <h5 className="mb-0 fw-bold text-dark">
+            Physical Progress Ledger{" "}
+            <span className="badge bg-secondary ms-1">{filteredRecords.length}</span>
+          </h5>
+
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            <select
+              className="form-select form-select-sm"
+              style={{ width: "200px" }}
+              value={selectedProjectFilter}
+              onChange={(e) => setSelectedProjectFilter(e.target.value)}
+            >
+              <option value="">All Projects</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.projectName}
+                </option>
+              ))}
+            </select>
+
+            <div className="input-group input-group-sm" style={{ width: "220px" }}>
+              <span className="input-group-text bg-light border-end-0">
+                <Search size={14} />
+              </span>
               <input
                 type="text"
-                placeholder="Search details or project..."
+                className="form-control bg-light border-start-0"
+                placeholder="Search parameter..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
 
-            <button onClick={() => window.print()} className="button-secondary print-btn" title="Print Ledger">
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+              onClick={handlePrint}
+            >
               <Printer size={14} /> Print
             </button>
           </div>
         </div>
 
-        <div className="table-overflow">
-          <table className="projects-table">
-            <thead>
-              <tr>
-                <th>Project Name</th>
-                <th>Completed Work</th>
-                <th>Work Progress Details</th>
-                <th>Date</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRecords.length > 0 ? (
-                filteredRecords.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <span className="project-name-tag">{item.projectName}</span>
-                    </td>
-                    <td style={{ fontWeight: 600, color: "var(--primary-color)" }}>
-                      +{item.completedQty}
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                        <FileText size={14} className="sub-text" />
-                        <span>{item.workDetails}</span>
-                      </div>
-                    </td>
-                    <td className="sub-text">{item.progressDate}</td>
-                    <td>
-                      <div className="table-action-cell" style={{ justifyContent: "flex-end" }}>
-                        <button
-                          onClick={() => setViewItem(item)}
-                          className="action-button"
-                          title="View Details"
-                        >
-                          <Eye size={15} />
-                        </button>
-                        <button
-                          onClick={() => handleEdit(item)}
-                          className="action-button action-button-edit"
-                          title="Edit Record"
-                        >
-                          <Edit2 size={15} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="action-button action-button-danger"
-                          title="Delete Record"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </td>
+        <div className="card-body p-0">
+          <div className="table-responsive">
+            {loading ? (
+              <div className="text-center py-5 text-muted">
+                <Loader size={24} className="spinner-border text-primary border-0" />
+                <p className="mt-2 small">Loading records...</p>
+              </div>
+            ) : filteredRecords.length === 0 ? (
+              <div className="text-center py-5 text-muted">
+                <AlertCircle size={32} className="mb-2" />
+                <p className="mb-0">No physical progress records found.</p>
+              </div>
+            ) : (
+              <table className="table table-hover align-middle mb-0">
+                <thead className="table-dark">
+                  <tr>
+                    <th>Project Name</th>
+                    <th>Date</th>
+                    <th>Parameter Name</th>
+                    <th>Progress Gain (%)</th>
+                    <th>Remarks</th>
+                    <th className="text-end">Actions</th>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="5">
-                    <div className="empty-state">
-                      <AlertCircle size={32} />
-                      <p>No physical progress records found matching your search.</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {filteredRecords.map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <strong className="text-dark">{item.projectName || "—"}</strong>
+                      </td>
+                      <td>{item.progressDate}</td>
+                      <td>
+                        <span className="badge bg-light text-dark border">
+                          {item.parameterName}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="fw-bold text-success">
+                          +{item.completedPercentage}%
+                        </span>
+                      </td>
+                      <td>
+                        <small className="text-muted">{item.remarks || "—"}</small>
+                      </td>
+                      <td className="text-end">
+                        <div className="btn-group btn-group-sm">
+                          <button
+                            onClick={() => setViewItem(item)}
+                            className="btn btn-outline-info"
+                            title="View Details"
+                          >
+                            <Eye size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleEdit(item)}
+                            className="btn btn-outline-primary"
+                            title="Edit Record"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            className="btn btn-outline-danger"
+                            title="Delete Record"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* View Detail Modal */}
+      {/* Details Modal */}
       {viewItem && (
-        <div className="modal-overlay" onClick={() => setViewItem(null)}>
-          <div className="modal-content modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Physical Work Details</h2>
-              <button className="modal-close" onClick={() => setViewItem(null)}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <div className="modal-profile-header">
-                <div className="profile-avatar">
-                  <Briefcase size={28} />
+        <div
+          className="modal fade show d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          onClick={() => setViewItem(null)}
+        >
+          <div className="modal-dialog modal-dialog-centered" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-content border-0 shadow">
+              <div className="modal-header bg-light">
+                <h5 className="modal-title fw-bold text-primary">Physical Progress Details</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setViewItem(null)}
+                ></button>
+              </div>
+              <div className="modal-body p-4">
+                <div className="d-flex align-items-center gap-3 mb-4 pb-3 border-bottom">
+                  <div className="p-3 bg-primary-subtle text-primary rounded-circle">
+                    <Briefcase size={24} />
+                  </div>
+                  <div>
+                    <h5 className="mb-0 fw-bold">{viewItem.projectName || "—"}</h5>
+                    <small className="text-muted">Recorded Date: {viewItem.progressDate}</small>
+                  </div>
                 </div>
-                <div>
-                  <h3>{viewItem.projectName}</h3>
-                  <span className="sub-text">Record ID: #{viewItem.id}</span>
+
+                <div className="row g-3">
+                  <div className="col-6">
+                    <small className="text-muted d-block">Parameter Name</small>
+                    <strong className="fs-6 text-dark">{viewItem.parameterName}</strong>
+                  </div>
+                  <div className="col-6">
+                    <small className="text-muted d-block">Progress Gain</small>
+                    <strong className="fs-6 text-success">+{viewItem.completedPercentage}%</strong>
+                  </div>
+                  {viewItem.remarks && (
+                    <div className="col-12 mt-2">
+                      <div className="p-3 bg-light rounded border">
+                        <small className="text-muted d-block mb-1 fw-semibold">Remarks</small>
+                        <p className="mb-0 text-dark">{viewItem.remarks}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-
-              <div className="modal-grid">
-                <div className="modal-item">
-                  <label><Activity size={12} /> Logged Progress</label>
-                  <p style={{ color: "var(--primary-color)" }}>
-                    +{viewItem.completedQty}
-                  </p>
-                </div>
-
-                <div className="modal-item">
-                  <label><Calendar size={12} /> Date Recorded</label>
-                  <p>{viewItem.progressDate}</p>
-                </div>
+              <div className="modal-footer bg-light py-2">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setViewItem(null)}
+                >
+                  Close
+                </button>
               </div>
-
-              <div className="project-history-card">
-                <div className="proj-card-header">
-                  <h5>Work Progress Description</h5>
-                </div>
-                <div className="proj-card-details">
-                  <p style={{ margin: 0, fontSize: "0.9375rem", color: "var(--text-main)" }}>
-                    {viewItem.workDetails}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button className="button-secondary" onClick={() => setViewItem(null)}>
-                Close
-              </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Print View Layout */}
-      <div className="print-table-wrapper">
-        <h1 className="print-title">Physical Progress Ledger</h1>
-        <p className="print-subtitle">Date Generated: {new Date().toLocaleDateString()}</p>
-        <table className="print-table" style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              <th>Project Name</th>
-              <th>Completed Work</th>
-              <th>Work Progress Details</th>
-              <th>Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {records.map((item) => (
-              <tr key={item.id}>
-                <td>{item.projectName}</td>
-                <td>{item.completedQty}</td>
-                <td>{item.workDetails}</td>
-                <td>{item.progressDate}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
+
 export default PhysicalProgress;
