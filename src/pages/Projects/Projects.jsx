@@ -7,7 +7,6 @@ import {
   Printer,
   Trash2,
   Edit2,
-  Eye,
   AlertCircle,
   RotateCcw,
   Loader,
@@ -15,7 +14,6 @@ import {
   Image as ImageIcon,
   X,
   Calendar,
-  DollarSign
 } from "lucide-react";
 import {
   getAllProjects,
@@ -24,7 +22,7 @@ import {
   deleteProject,
   getAllMinistries,
   getDirectoratesByMinistry,
-  getAllDirectorates
+  getAllDirectorates,
 } from "../../services/ProjectService";
 
 const PRIORITIES = ["High", "Medium", "Low"];
@@ -69,6 +67,12 @@ const formatDate = (isoDate) => {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 };
 
+const formatNumber = (val) => {
+  if (val === null || val === undefined || val === "") return "—";
+  const num = Number(val);
+  return isNaN(num) ? "—" : num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 const INITIAL_FORM_STATE = {
   projectName: "",
   ministryId: "",
@@ -81,7 +85,7 @@ const INITIAL_FORM_STATE = {
   revisedBudget: "",
   priority: "Medium",
   status: "Approved",
-  images: []
+  images: [],
 };
 
 export default function Projects() {
@@ -94,7 +98,6 @@ export default function Projects() {
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [editingId, setEditingId] = useState(null);
   const [errors, setErrors] = useState({});
-  const [viewProject, setViewProject] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
@@ -114,7 +117,7 @@ export default function Projects() {
       const [minRes, dirRes, projRes] = await Promise.all([
         getAllMinistries().catch(() => ({ data: [] })),
         getAllDirectorates().catch(() => ({ data: [] })),
-        getAllProjects().catch(() => ({ data: [] }))
+        getAllProjects().catch(() => ({ data: [] })),
       ]);
 
       const minData = minRes.data || [];
@@ -159,7 +162,7 @@ export default function Projects() {
     setFormData((prev) => ({
       ...prev,
       ministryId: selectedMinistryId,
-      directorateId: ""
+      directorateId: "",
     }));
 
     if (errors.ministryId) setErrors((prev) => ({ ...prev, ministryId: null }));
@@ -187,7 +190,7 @@ export default function Projects() {
     if (oversized.length > 0) {
       setErrors((prev) => ({
         ...prev,
-        images: `${oversized.length} image(s) skipped — 1 MB max per image.`
+        images: `${oversized.length} image(s) skipped — 1 MB max per image.`,
       }));
     } else if (errors.images) {
       setErrors((prev) => ({ ...prev, images: null }));
@@ -218,7 +221,6 @@ export default function Projects() {
   const validateForm = () => {
     const newErrors = {};
 
-    // Required Field Validations
     if (!formData.projectName || !formData.projectName.trim()) {
       newErrors.projectName = "Project name is required.";
     }
@@ -226,7 +228,6 @@ export default function Projects() {
       newErrors.ministryId = "Select parent ministry.";
     }
 
-    // Approved Dates & Budget (Required)
     if (!formData.approvedStartDate) {
       newErrors.approvedStartDate = "Start date is required.";
     }
@@ -244,7 +245,6 @@ export default function Projects() {
       newErrors.approvedBudget = "Valid approved budget is required.";
     }
 
-    // Revised Dates (Optional: Validated only if both values exist)
     if (
       formData.revisedStartDate &&
       formData.revisedEndDate &&
@@ -253,9 +253,8 @@ export default function Projects() {
       newErrors.revisedEndDate = "Revised end date must be after revised start date.";
     }
 
-    // Revised Budget (Optional: Validated only if entered)
-    if (formData.revisedBudget && Number(formData.revisedBudget) <= 0) {
-      newErrors.revisedBudget = "Valid revised budget is required.";
+    if (formData.revisedBudget !== "" && formData.revisedBudget !== null && Number(formData.revisedBudget) < 0) {
+      newErrors.revisedBudget = "Revised budget cannot be negative.";
     }
 
     setErrors(newErrors);
@@ -266,6 +265,7 @@ export default function Projects() {
     e.preventDefault();
     if (!validateForm()) return;
 
+    // Explicit payload mapping so revised fields properly save and update as null when cleared
     const payload = {
       projectName: formData.projectName.trim(),
       ministryId: Number(formData.ministryId),
@@ -275,10 +275,10 @@ export default function Projects() {
       approvedBudget: Number(formData.approvedBudget),
       revisedStartDate: formData.revisedStartDate ? formData.revisedStartDate : null,
       revisedEndDate: formData.revisedEndDate ? formData.revisedEndDate : null,
-      revisedBudget: formData.revisedBudget ? Number(formData.revisedBudget) : null,
+      revisedBudget: formData.revisedBudget !== "" && formData.revisedBudget !== null ? Number(formData.revisedBudget) : null,
       priority: formData.priority.toUpperCase(),
       status: formData.status.toUpperCase(),
-      images: formData.images
+      images: formData.images,
     };
 
     setSubmitting(true);
@@ -329,17 +329,17 @@ export default function Projects() {
       directorateId: String(project.directorateId || ""),
       approvedStartDate: project.approvedStartDate || "",
       approvedEndDate: project.approvedEndDate || "",
-      approvedBudget: project.approvedBudget || "",
+      approvedBudget: project.approvedBudget !== null && project.approvedBudget !== undefined ? String(project.approvedBudget) : "",
       revisedStartDate: project.revisedStartDate || "",
       revisedEndDate: project.revisedEndDate || "",
-      revisedBudget: project.revisedBudget || "",
+      revisedBudget: project.revisedBudget !== null && project.revisedBudget !== undefined ? String(project.revisedBudget) : "",
       priority: project.priority
         ? project.priority.charAt(0) + project.priority.slice(1).toLowerCase()
         : "Medium",
       status: project.status
         ? project.status.charAt(0) + project.status.slice(1).toLowerCase()
         : "Approved",
-      images: project.images || []
+      images: project.images || [],
     });
 
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -370,8 +370,86 @@ export default function Projects() {
     });
   }, [projects, searchTerm, ministryFilter, ministriesMap, allDirectoratesMap]);
 
+  // Dedicated Popup Print Handler
+  const handlePrint = () => {
+    const printWindow = window.open("", "_blank", "width=1000,height=700");
+    if (!printWindow) {
+      alert("Please allow popups to enable printing.");
+      return;
+    }
+
+    const rowsHtml = filteredProjects
+      .map((p) => {
+        const minName = ministriesMap[p.ministryId] || "—";
+        const dirName = allDirectoratesMap[p.directorateId] || "—";
+        return `
+        <tr>
+          <td><strong>${p.projectName || "—"}</strong></td>
+          <td>
+            <div>${minName}</div>
+            <small style="color: #666;">${dirName}</small>
+          </td>
+          <td>${formatDate(p.approvedStartDate)} - ${formatDate(p.approvedEndDate)}</td>
+          <td><strong>${formatNumber(p.approvedBudget)}</strong></td>
+          <td>${p.revisedStartDate || p.revisedEndDate ? `${formatDate(p.revisedStartDate)} - ${formatDate(p.revisedEndDate)}` : "—"}</td>
+          <td><strong>${formatNumber(p.revisedBudget)}</strong></td>
+          <td>${p.priority || "—"}</td>
+          <td>${p.status || "—"}</td>
+        </tr>
+      `;
+      })
+      .join("");
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Projects Report</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+            h2 { margin-bottom: 5px; color: #000; }
+            p { font-size: 12px; color: #666; margin-top: 0; margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; font-size: 12px; }
+            th { background-color: #222; color: #fff; font-weight: bold; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+          </style>
+        </head>
+        <body>
+          <h2>Projects Directory</h2>
+          <p>Generated on: ${new Date().toLocaleString()} | Total Records: ${filteredProjects.length}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Project Name</th>
+                <th>Ministry & Directorate</th>
+                <th>Approved Timeline</th>
+                <th>Approved Budget (Lakhs Tk)</th>
+                <th>Revised Timeline</th>
+                <th>Revised Budget (Lakhs Tk)</th>
+                <th>Priority</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml.length > 0 ? rowsHtml : '<tr><td colspan="8" style="text-align:center;">No records available</td></tr>'}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  };
+
   return (
-    <div className="container-fluid py-4 bg-light">
+    <div className="container-fluid py-4 bg-light min-vh-100">
       {/* Create / Update Project Form Card */}
       <div className="card shadow-sm mb-4 border-0">
         <div className="card-header bg-white d-flex justify-content-between align-items-center py-3 border-bottom">
@@ -473,7 +551,7 @@ export default function Projects() {
 
               <div className="col-md-4">
                 <label className="form-label fw-semibold">
-                  Approved Budget (Lakhs of TK) <span className="text-danger">*</span>
+                  Approved Budget (in Lakhs Tk) <span className="text-danger">*</span>
                 </label>
                 <input
                   type="number"
@@ -519,7 +597,7 @@ export default function Projects() {
 
               <div className="col-md-4">
                 <label className="form-label fw-semibold">
-                  Revised Budget (Lakhs of TK) <span className="text-muted fw-normal">(Optional)</span>
+                  Revised Budget (in Lakhs Tk) <span className="text-muted fw-normal">(Optional)</span>
                 </label>
                 <input
                   type="number"
@@ -669,7 +747,7 @@ export default function Projects() {
               />
             </div>
             <button
-              onClick={() => window.print()}
+              onClick={handlePrint}
               className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"
             >
               <Printer size={14} /> Print List
@@ -696,9 +774,9 @@ export default function Projects() {
                     <th>Project Name</th>
                     <th>Ministry & Directorate</th>
                     <th>Approved Timeline</th>
-                    <th>Approved Budget</th>
+                    <th>Approved Budget (Lakhs Tk)</th>
                     <th>Revised Timeline</th>
-                    <th>Revised Budget</th>
+                    <th>Revised Budget (Lakhs Tk)</th>
                     <th>Priority</th>
                     <th>Status</th>
                     <th className="text-end">Actions</th>
@@ -765,7 +843,7 @@ export default function Projects() {
                             </small>
                           </td>
                           <td className="align-middle fw-semibold text-dark">
-                            ৳ {Number(project.approvedBudget || 0).toFixed(2)} Lakhs
+                            {formatNumber(project.approvedBudget)}
                           </td>
                           <td className="align-middle">
                             {project.revisedStartDate || project.revisedEndDate ? (
@@ -785,7 +863,7 @@ export default function Projects() {
                             )}
                           </td>
                           <td className="align-middle fw-semibold text-dark">
-                            {project.revisedBudget ? `৳ ${Number(project.revisedBudget).toFixed(2)} Lakhs` : "—"}
+                            {formatNumber(project.revisedBudget)}
                           </td>
                           <td className="align-middle">
                             <span className={priorityPillClass(formattedPriority)}>
@@ -797,26 +875,19 @@ export default function Projects() {
                               {formattedStatus}
                             </span>
                           </td>
-                          <td className="text-end align-middle">
+                          <td className="align-middle text-end">
                             <div className="btn-group btn-group-sm">
-                              <button
-                                onClick={() => setViewProject(project)}
-                                className="btn btn-outline-secondary"
-                                title="View Details"
-                              >
-                                <Eye size={14} />
-                              </button>
                               <button
                                 onClick={() => handleEdit(project)}
                                 className="btn btn-outline-primary"
-                                title="Edit Record"
+                                title="Edit project"
                               >
                                 <Edit2 size={14} />
                               </button>
                               <button
                                 onClick={() => handleDelete(project.id)}
                                 className="btn btn-outline-danger"
-                                title="Delete Record"
+                                title="Delete project"
                               >
                                 <Trash2 size={14} />
                               </button>
@@ -828,7 +899,7 @@ export default function Projects() {
                   ) : (
                     <tr>
                       <td colSpan="9" className="text-center py-4 text-muted">
-                        No projects found matching the criteria.
+                        No projects found matching the selection criteria.
                       </td>
                     </tr>
                   )}
@@ -838,85 +909,6 @@ export default function Projects() {
           </div>
         </div>
       </div>
-
-      {/* View Details Modal */}
-      {viewProject && (
-        <div className="modal fade show d-block tab-index-1" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
-          <div className="modal-dialog modal-lg modal-dialog-centered">
-            <div className="modal-content border-0 shadow">
-              <div className="modal-header bg-light">
-                <h5 className="modal-title fw-bold text-primary">{viewProject.projectName}</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setViewProject(null)}
-                ></button>
-              </div>
-              <div className="modal-body p-4">
-                <div className="row g-3">
-                  <div className="col-md-6">
-                    <strong className="d-block text-muted small">Parent Ministry</strong>
-                    <span>{ministriesMap[viewProject.ministryId] || "—"}</span>
-                  </div>
-                  <div className="col-md-6">
-                    <strong className="d-block text-muted small">Directorate</strong>
-                    <span>{allDirectoratesMap[viewProject.directorateId] || "—"}</span>
-                  </div>
-                  <div className="col-md-6">
-                    <strong className="d-block text-muted small">Approved Timeline</strong>
-                    <span>{formatDate(viewProject.approvedStartDate)} to {formatDate(viewProject.approvedEndDate)}</span>
-                  </div>
-                  <div className="col-md-6">
-                    <strong className="d-block text-muted small">Approved Budget</strong>
-                    <span>৳ {Number(viewProject.approvedBudget || 0).toFixed(2)} Lakhs</span>
-                  </div>
-                  <div className="col-md-6">
-                    <strong className="d-block text-muted small">Revised Timeline</strong>
-                    <span>
-                      {viewProject.revisedStartDate || viewProject.revisedEndDate
-                        ? `${formatDate(viewProject.revisedStartDate) || "—"} to ${formatDate(viewProject.revisedEndDate) || "—"}`
-                        : "—"}
-                    </span>
-                  </div>
-                  <div className="col-md-6">
-                    <strong className="d-block text-muted small">Revised Budget</strong>
-                    <span>{viewProject.revisedBudget ? `৳ ${Number(viewProject.revisedBudget).toFixed(2)} Lakhs` : "—"}</span>
-                  </div>
-                  <div className="col-md-6">
-                    <strong className="d-block text-muted small">Priority</strong>
-                    <span className={priorityPillClass(viewProject.priority)}>{viewProject.priority}</span>
-                  </div>
-                  <div className="col-md-6">
-                    <strong className="d-block text-muted small">Status</strong>
-                    <span className={statusPillClass(viewProject.status)}>{viewProject.status}</span>
-                  </div>
-                  {viewProject.images && viewProject.images.length > 0 && (
-                    <div className="col-12 mt-3">
-                      <strong className="d-block text-muted small mb-2">Attached Images</strong>
-                      <div className="d-flex flex-wrap gap-2">
-                        {viewProject.images.map((img, idx) => (
-                          <img
-                            key={idx}
-                            src={img}
-                            alt={`Project attachment ${idx + 1}`}
-                            className="rounded border shadow-sm"
-                            style={{ width: "90px", height: "90px", objectFit: "cover" }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="modal-footer bg-light">
-                <button className="btn btn-secondary" onClick={() => setViewProject(null)}>
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

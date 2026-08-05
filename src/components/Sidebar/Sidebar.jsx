@@ -49,6 +49,7 @@ const menus = [
       { name: "Development Partner", icon: <FaMoneyBillWave />, path: "/projects/development/partner" },
       { name: "Finance", icon: <FaMoneyBillWave />, path: "/projects/finance" },
       { name: "Project Director", icon: <FaUserTie />, path: "/projects/director" },
+      { name: "Received Fund", icon: <FaUserTie />, path: "/projects/received/fund" },
       { name: "Financial Progress", icon: <FaMoneyBillWave />, path: "/projects/financial/progress" },
       { name: "Physical Progress", icon: <FaClipboardList />, path: "/projects/physical/progress" },
       { name: "Achievement", icon: <FaTrophy />, path: "/projects/achievement" },
