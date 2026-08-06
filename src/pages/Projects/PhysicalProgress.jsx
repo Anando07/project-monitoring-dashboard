@@ -16,6 +16,8 @@ import {
   TrendingUp,
   CheckCircle2,
   PieChart,
+  Save,
+  X,
 } from "lucide-react";
 
 import { getAllProjects } from "../../services/ProjectService";
@@ -26,6 +28,8 @@ import {
   deletePhysicalProgress,
   getProjectWorkParameters,
   saveProjectWorkParameters,
+  updateProjectWorkParameter,
+  deleteProjectWorkParameter,
 } from "../../services/PhysicalProgressService";
 
 function PhysicalProgress() {
@@ -39,10 +43,20 @@ function PhysicalProgress() {
 
   // Stage 1: Target Setup State
   const [targetProjectId, setTargetProjectId] = useState("");
+  const [savedParameters, setSavedParameters] = useState([]); // already-persisted parameters for selected project
   const [targetParameters, setTargetParameters] = useState([
     { parameterName: "", weightagePercentage: "" },
-  ]);
+  ]); // rows for adding NEW parameters only
   const [targetErrors, setTargetErrors] = useState({});
+  const [targetsLoading, setTargetsLoading] = useState(false);
+
+  // Inline edit state for existing (saved) parameters
+  const [editingParamId, setEditingParamId] = useState(null);
+  const [editRowData, setEditRowData] = useState({
+    parameterName: "",
+    weightagePercentage: "",
+  });
+  const [rowActionError, setRowActionError] = useState(null);
 
   // Stage 2: Logging Form State
   const [formData, setFormData] = useState({
@@ -81,32 +95,44 @@ function PhysicalProgress() {
     }
   };
 
+  // ========================================================================
   // STAGE 1: Target Setup Handlers
+  // ========================================================================
+
   const handleTargetProjectSelect = async (e) => {
     const pId = e.target.value;
     setTargetProjectId(pId);
     setTargetErrors({});
+    setRowActionError(null);
+    setEditingParamId(null);
+    setTargetParameters([{ parameterName: "", weightagePercentage: "" }]);
 
     if (pId) {
+      setTargetsLoading(true);
       try {
         const res = await getProjectWorkParameters(pId);
-        if (res.data && res.data.length > 0) {
-          setTargetParameters(
-            res.data.map((item) => ({
-              parameterName: item.parameterName,
-              weightagePercentage: String(item.weightagePercentage),
-            }))
-          );
-        } else {
-          setTargetParameters([{ parameterName: "", weightagePercentage: "" }]);
-        }
+        setSavedParameters(res.data || []);
       } catch (err) {
-        setTargetParameters([{ parameterName: "", weightagePercentage: "" }]);
+        setSavedParameters([]);
+      } finally {
+        setTargetsLoading(false);
       }
     } else {
-      setTargetParameters([{ parameterName: "", weightagePercentage: "" }]);
+      setSavedParameters([]);
     }
   };
+
+  const refreshSavedParameters = async (pId) => {
+    try {
+      const res = await getProjectWorkParameters(pId);
+      setSavedParameters(res.data || []);
+      return res.data || [];
+    } catch (err) {
+      return [];
+    }
+  };
+
+  // ---- Add-new-row handlers (targetParameters) ----
 
   const handleAddTargetRow = () => {
     setTargetParameters((prev) => [
@@ -125,14 +151,26 @@ function PhysicalProgress() {
     setTargetParameters(updated);
   };
 
+  const savedTotalPercentage = useMemo(() => {
+    return savedParameters.reduce(
+      (sum, p) => sum + Number(p.weightagePercentage || 0),
+      0
+    );
+  }, [savedParameters]);
+
   const validateTargets = () => {
     const errs = {};
     if (!targetProjectId) errs.targetProjectId = "Select a project.";
 
-    const rowErrs = [];
-    let totalPct = 0;
+    // Only validate rows that the user has actually started filling in.
+    const activeRows = targetParameters.filter(
+      (p) => p.parameterName.trim() !== "" || p.weightagePercentage !== ""
+    );
 
-    targetParameters.forEach((param, idx) => {
+    const rowErrs = [];
+    let newRowsTotal = 0;
+
+    activeRows.forEach((param, idx) => {
       const rErr = {};
       if (!param.parameterName || !param.parameterName.trim()) {
         rErr.parameterName = "Parameter name is required.";
@@ -141,14 +179,23 @@ function PhysicalProgress() {
       if (isNaN(val) || val <= 0 || val > 100) {
         rErr.weightagePercentage = "Invalid target %";
       } else {
-        totalPct += val;
+        newRowsTotal += val;
       }
       if (Object.keys(rErr).length > 0) rowErrs[idx] = rErr;
     });
 
     if (rowErrs.length > 0) errs.rowErrs = rowErrs;
-    if (Math.abs(totalPct - 100) > 0.01) {
-      errs.total = `Total target weightage must sum to 100%. Current: ${totalPct.toFixed(1)}%`;
+
+    // Nothing to add and nothing already saved -> nothing to submit.
+    if (activeRows.length === 0 && savedParameters.length === 0) {
+      errs.total = "Add at least one parameter.";
+    } else if (activeRows.length > 0) {
+      const combinedTotal = savedTotalPercentage + newRowsTotal;
+      if (Math.abs(combinedTotal - 100) > 0.01) {
+        errs.total = `Total target weightage (existing + new) must sum to 100%. Current: ${combinedTotal.toFixed(
+          1
+        )}%`;
+      }
     }
 
     setTargetErrors(errs);
@@ -159,18 +206,36 @@ function PhysicalProgress() {
     e.preventDefault();
     if (!validateTargets()) return;
 
-    const payload = targetParameters.map((p) => ({
-      parameterName: p.parameterName.trim(),
-      weightagePercentage: Number(p.weightagePercentage),
-    }));
+    const activeRows = targetParameters.filter(
+      (p) => p.parameterName.trim() !== "" && p.weightagePercentage !== ""
+    );
+
+    // Nothing new to add — no-op.
+    if (activeRows.length === 0) {
+      setActiveTab("LOG_PROGRESS");
+      return;
+    }
+
+    const combinedPayload = [
+      ...savedParameters.map((p) => ({
+        id: p.id,
+        parameterName: p.parameterName,
+        weightagePercentage: p.weightagePercentage,
+      })),
+      ...activeRows.map((p) => ({
+        parameterName: p.parameterName.trim(),
+        weightagePercentage: Number(p.weightagePercentage),
+      })),
+    ];
 
     try {
-      await saveProjectWorkParameters(targetProjectId, payload);
+      const res = await saveProjectWorkParameters(targetProjectId, combinedPayload);
+      setSavedParameters(res.data || []);
+      setTargetParameters([{ parameterName: "", weightagePercentage: "" }]);
       alert("Parameter target configuration saved to database successfully!");
 
       if (String(formData.projectId) === String(targetProjectId)) {
-        const refreshed = await getProjectWorkParameters(targetProjectId);
-        setActiveProjectParameters(refreshed.data || []);
+        setActiveProjectParameters(res.data || []);
       }
 
       setActiveTab("LOG_PROGRESS");
@@ -180,7 +245,92 @@ function PhysicalProgress() {
     }
   };
 
+  // ---- Existing-parameter inline edit/delete handlers (savedParameters) ----
+
+  const startEditParam = (param) => {
+    setEditingParamId(param.id);
+    setEditRowData({
+      parameterName: param.parameterName,
+      weightagePercentage: String(param.weightagePercentage),
+    });
+    setRowActionError(null);
+  };
+
+  const cancelEditParam = () => {
+    setEditingParamId(null);
+    setEditRowData({ parameterName: "", weightagePercentage: "" });
+    setRowActionError(null);
+  };
+
+  const saveEditParam = async (paramId) => {
+    const val = parseFloat(editRowData.weightagePercentage);
+
+    if (!editRowData.parameterName || !editRowData.parameterName.trim()) {
+      setRowActionError("Parameter name is required.");
+      return;
+    }
+    if (isNaN(val) || val <= 0 || val > 100) {
+      setRowActionError("Enter a valid weightage between 1 and 100.");
+      return;
+    }
+
+    try {
+      const res = await updateProjectWorkParameter(paramId, {
+        parameterName: editRowData.parameterName.trim(),
+        weightagePercentage: val,
+      });
+      setSavedParameters((prev) =>
+        prev.map((p) => (p.id === paramId ? res.data : p))
+      );
+
+      if (String(formData.projectId) === String(targetProjectId)) {
+        setActiveProjectParameters((prev) =>
+          prev.map((p) => (p.id === paramId ? res.data : p))
+        );
+      }
+
+      cancelEditParam();
+    } catch (err) {
+      setRowActionError(
+        err.response?.data?.message || "Failed to update parameter."
+      );
+    }
+  };
+
+  const handleDeleteParam = async (param) => {
+    if (
+      !window.confirm(
+        `Delete parameter "${param.parameterName}"? This cannot be undone.`
+      )
+    )
+      return;
+
+    try {
+      await deleteProjectWorkParameter(param.id);
+      setSavedParameters((prev) => prev.filter((p) => p.id !== param.id));
+
+      if (String(formData.projectId) === String(targetProjectId)) {
+        setActiveProjectParameters((prev) =>
+          prev.filter((p) => p.id !== param.id)
+        );
+        if (String(formData.projectWorkParameterId) === String(param.id)) {
+          setFormData((prev) => ({
+            ...prev,
+            projectWorkParameterId: "",
+            completedPercentage: "",
+          }));
+        }
+      }
+      setRowActionError(null);
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to delete parameter.");
+    }
+  };
+
+  // ========================================================================
   // STAGE 2: Progress Logging Handlers
+  // ========================================================================
+
   const handleProgressProjectSelect = async (e) => {
     const selectedId = e.target.value;
     const project = projects.find((p) => String(p.id) === String(selectedId));
@@ -215,18 +365,23 @@ function PhysicalProgress() {
 
   // Fetch parameter object matching selected ID
   const selectedParameterObj = useMemo(() => {
-    if (!formData.projectWorkParameterId || activeProjectParameters.length === 0) return null;
+    if (!formData.projectWorkParameterId || activeProjectParameters.length === 0)
+      return null;
     return activeProjectParameters.find(
       (p) => String(p.id) === String(formData.projectWorkParameterId)
     );
   }, [formData.projectWorkParameterId, activeProjectParameters]);
 
   const currentTargetWeightage = useMemo(() => {
-    return selectedParameterObj ? Number(selectedParameterObj.weightagePercentage || 0) : 0;
+    return selectedParameterObj
+      ? Number(selectedParameterObj.weightagePercentage || 0)
+      : 0;
   }, [selectedParameterObj]);
 
   const currentAlreadyCompleted = useMemo(() => {
-    return selectedParameterObj ? Number(selectedParameterObj.alreadyCompletedPercentage || 0) : 0;
+    return selectedParameterObj
+      ? Number(selectedParameterObj.alreadyCompletedPercentage || 0)
+      : 0;
   }, [selectedParameterObj]);
 
   const maxAllowedGain = useMemo(() => {
@@ -237,13 +392,16 @@ function PhysicalProgress() {
     const newErrors = {};
     if (!formData.projectId) newErrors.projectId = "Please select a project.";
     if (!formData.progressDate) newErrors.progressDate = "Date is required.";
-    if (!formData.projectWorkParameterId) newErrors.projectWorkParameterId = "Please select a parameter.";
+    if (!formData.projectWorkParameterId)
+      newErrors.projectWorkParameterId = "Please select a parameter.";
 
     const pct = parseFloat(formData.completedPercentage);
     if (isNaN(pct) || pct <= 0) {
       newErrors.completedPercentage = "Enter a valid positive percentage.";
     } else if (formData.projectWorkParameterId && pct > maxAllowedGain) {
-      newErrors.completedPercentage = `Exceeds limit! Max gain allowed is ${maxAllowedGain.toFixed(2)}%`;
+      newErrors.completedPercentage = `Exceeds limit! Max gain allowed is ${maxAllowedGain.toFixed(
+        2
+      )}%`;
     }
 
     setErrors(newErrors);
@@ -458,11 +616,163 @@ function PhysicalProgress() {
                   )}
                 </div>
 
+                {/* EXISTING (SAVED) PARAMETERS — VIEW / EDIT / DELETE */}
                 {targetProjectId && (
                   <div className="col-12 mt-4">
                     <div className="d-flex justify-content-between align-items-center mb-2">
                       <label className="form-label fw-semibold mb-0 d-flex align-items-center gap-1">
-                        <Layers size={16} /> Work Parameters Target Breakdown (Must Sum to 100%)
+                        <Layers size={16} /> Existing Parameters for this Project
+                      </label>
+                      <span
+                        className={`badge ${
+                          Math.abs(savedTotalPercentage - 100) < 0.01
+                            ? "bg-success"
+                            : "bg-secondary"
+                        }`}
+                      >
+                        Current Total: {savedTotalPercentage.toFixed(1)}%
+                      </span>
+                    </div>
+
+                    {rowActionError && (
+                      <div className="alert alert-danger py-2 px-3 small mb-2">
+                        {rowActionError}
+                      </div>
+                    )}
+
+                    {targetsLoading ? (
+                      <div className="text-center py-4 text-muted">
+                        <Loader size={20} />
+                        <p className="mt-2 small mb-0">Loading parameters...</p>
+                      </div>
+                    ) : savedParameters.length === 0 ? (
+                      <div className="alert alert-light border py-2 px-3 small mb-0 text-muted">
+                        No parameters configured yet for this project. Add some below.
+                      </div>
+                    ) : (
+                      <div className="table-responsive">
+                        <table className="table table-sm table-bordered align-middle mb-0 bg-white">
+                          <thead className="table-light">
+                            <tr>
+                              <th>Parameter Name</th>
+                              <th style={{ width: "140px" }}>Target %</th>
+                              <th style={{ width: "160px" }}>Already Completed %</th>
+                              <th style={{ width: "130px" }} className="text-end">
+                                Actions
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {savedParameters.map((param) => {
+                              const isRowEditing = editingParamId === param.id;
+                              const alreadyDone = Number(
+                                param.alreadyCompletedPercentage || 0
+                              );
+                              return (
+                                <tr key={param.id}>
+                                  <td>
+                                    {isRowEditing ? (
+                                      <input
+                                        type="text"
+                                        className="form-control form-control-sm"
+                                        value={editRowData.parameterName}
+                                        onChange={(e) =>
+                                          setEditRowData((prev) => ({
+                                            ...prev,
+                                            parameterName: e.target.value,
+                                          }))
+                                        }
+                                      />
+                                    ) : (
+                                      param.parameterName
+                                    )}
+                                  </td>
+                                  <td>
+                                    {isRowEditing ? (
+                                      <div className="input-group input-group-sm">
+                                        <input
+                                          type="number"
+                                          step="0.1"
+                                          min="1"
+                                          max="100"
+                                          className="form-control"
+                                          value={editRowData.weightagePercentage}
+                                          onChange={(e) =>
+                                            setEditRowData((prev) => ({
+                                              ...prev,
+                                              weightagePercentage: e.target.value,
+                                            }))
+                                          }
+                                        />
+                                        <span className="input-group-text">%</span>
+                                      </div>
+                                    ) : (
+                                      `${param.weightagePercentage}%`
+                                    )}
+                                  </td>
+                                  <td className="text-muted">{alreadyDone}%</td>
+                                  <td className="text-end">
+                                    {isRowEditing ? (
+                                      <div className="btn-group btn-group-sm">
+                                        <button
+                                          type="button"
+                                          className="btn btn-outline-success"
+                                          title="Save"
+                                          onClick={() => saveEditParam(param.id)}
+                                        >
+                                          <Save size={14} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="btn btn-outline-secondary"
+                                          title="Cancel"
+                                          onClick={cancelEditParam}
+                                        >
+                                          <X size={14} />
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="btn-group btn-group-sm">
+                                        <button
+                                          type="button"
+                                          className="btn btn-outline-primary"
+                                          title="Edit Parameter"
+                                          onClick={() => startEditParam(param)}
+                                        >
+                                          <Edit2 size={14} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="btn btn-outline-danger"
+                                          title={
+                                            alreadyDone > 0
+                                              ? "Cannot delete — progress already logged"
+                                              : "Delete Parameter"
+                                          }
+                                          disabled={alreadyDone > 0}
+                                          onClick={() => handleDeleteParam(param)}
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ADD NEW PARAMETERS */}
+                {targetProjectId && (
+                  <div className="col-12 mt-4">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <label className="form-label fw-semibold mb-0 d-flex align-items-center gap-1">
+                        <Plus size={16} /> Add New Parameters
                       </label>
                       <button
                         type="button"
@@ -546,6 +856,7 @@ function PhysicalProgress() {
                   <button
                     type="submit"
                     className="btn btn-primary d-inline-flex align-items-center gap-1"
+                    disabled={!targetProjectId}
                   >
                     <Plus size={16} /> Save Parameter Configuration
                   </button>

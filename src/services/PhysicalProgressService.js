@@ -7,6 +7,14 @@ export const saveProjectWorkParameters = (projectId, parameters) =>
 export const getProjectWorkParameters = (projectId) =>
   api.get(`/physical-progress/project/${projectId}/parameters`);
 
+// Update a single existing work parameter (name and/or target weightage)
+export const updateProjectWorkParameter = (parameterId, data) =>
+  api.put(`/physical-progress/project/parameters/${parameterId}`, data);
+
+// Delete a single existing work parameter (blocked server-side if progress already logged)
+export const deleteProjectWorkParameter = (parameterId) =>
+  api.delete(`/physical-progress/project/parameters/${parameterId}`);
+
 // Stage 2: Log Dated Progress
 export const getAllPhysicalProgress = () => api.get("/physical-progress");
 
